@@ -109,7 +109,7 @@ async function main() {
   initNav();
   initNowbar();
   initPlayer();
-  initTerminal();
+  await initTerminal();
   await Promise.all([initSettings(), initPreferences()]);
 
   subscribe(() => {

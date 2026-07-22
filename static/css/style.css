@@ -1004,6 +1004,29 @@ input:focus {
   outline: none;
 }
 
+.terminal-hints {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.terminal-error {
+  color: #f87171;
+}
+
+.terminal-login {
+  max-width: 420px;
+}
+
+.terminal-login label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.terminal-login input {
+  width: 100%;
+}
+
 .terminal-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(29, 185, 84, 0.12);

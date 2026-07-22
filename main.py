@@ -7,17 +7,22 @@ fallback when no broker is reachable).
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 import pty
+import secrets
 import select
+import shlex
+import shutil
 import subprocess
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -112,6 +117,96 @@ class ShellSession:
 
 
 manager = ConnectionManager()
+
+TERMINAL_TOKEN_COOKIE = "terminal_token"
+TERMINAL_TOKEN_TTL = 3600
+TERMINAL_COMMAND_HINTS = [
+    "cd",
+    "ls",
+    "pwd",
+    "cat",
+    "tail",
+    "less",
+    "nano",
+    "vim",
+    "python",
+    "python3",
+    "sudo",
+    "systemctl",
+    "journalctl",
+    "htop",
+    "top",
+    "git",
+    "ping",
+    "curl",
+    "wget",
+    "mkdir",
+    "rm",
+    "mv",
+    "cp",
+    "chmod",
+    "chown",
+    "ifconfig",
+    "ip",
+    "df",
+    "du",
+    "echo",
+    "date",
+    "whoami",
+    "uname",
+    "reboot",
+    "shutdown",
+]
+terminal_sessions: dict[str, float] = {}
+
+
+def _terminal_password() -> str:
+    settings = config.load("settings")
+    password = settings.get("terminal_password")
+    if isinstance(password, str) and password.strip():
+        return password
+    return os.environ.get("TERMINAL_PASSWORD", "kapfela")
+
+
+def _cleanup_terminal_sessions() -> None:
+    now = time.time()
+    expired = [token for token, expires in terminal_sessions.items() if expires < now]
+    for token in expired:
+        terminal_sessions.pop(token, None)
+
+
+def _issue_terminal_token() -> str:
+    _cleanup_terminal_sessions()
+    token = secrets.token_urlsafe(32)
+    terminal_sessions[token] = time.time() + TERMINAL_TOKEN_TTL
+    return token
+
+
+def _verify_terminal_token(token: str | None) -> bool:
+    if not token:
+        return False
+    _cleanup_terminal_sessions()
+    expires = terminal_sessions.get(token)
+    return bool(expires and expires > time.time())
+
+
+def _complete_terminal_suggestions(prefix: str) -> list[str]:
+    if not prefix:
+        return []
+    if os.name == "posix" and shutil.which("bash"):
+        try:
+            quoted = shlex.quote(prefix)
+            result = subprocess.run(
+                ["bash", "-lc", f"compgen -A command -- {quoted}"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            suggestions = [line for line in result.stdout.splitlines() if line.startswith(prefix)]
+            return sorted(set(suggestions))[:30]
+        except Exception:
+            pass
+    return [cmd for cmd in TERMINAL_COMMAND_HINTS if cmd.startswith(prefix)]
 
 
 def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
@@ -269,9 +364,35 @@ async def put_settings(body: dict[str, Any]) -> JSONResponse:
     return JSONResponse(saved)
 
 
+@app.post("/api/terminal/login")
+async def terminal_login(body: dict[str, Any]) -> JSONResponse:
+    password = str(body.get("password", ""))
+    expected = _terminal_password()
+    if not hmac.compare_digest(password, expected):
+        return JSONResponse({"error": "invalid credentials"}, status_code=401)
+    token = _issue_terminal_token()
+    return JSONResponse({"token": token})
+
+
+@app.get("/api/terminal/status")
+async def terminal_status(request: Request) -> JSONResponse:
+    token = request.cookies.get(TERMINAL_TOKEN_COOKIE)
+    return JSONResponse({"authorized": _verify_terminal_token(token)})
+
+
 @app.get("/api/instruments")
 async def get_instruments() -> JSONResponse:
     return JSONResponse(config.load("instruments"))
+
+
+@app.post("/api/terminal/complete")
+async def terminal_complete(request: Request, body: dict[str, Any]) -> JSONResponse:
+    token = request.cookies.get(TERMINAL_TOKEN_COOKIE)
+    if not _verify_terminal_token(token):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    prefix = str(body.get("prefix", ""))
+    hints = _complete_terminal_suggestions(prefix)
+    return JSONResponse({"hints": hints})
 
 
 @app.put("/api/instruments")
@@ -300,6 +421,11 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
 @app.websocket("/ws/terminal")
 async def websocket_terminal(ws: WebSocket) -> None:
+    token = ws.cookies.get(TERMINAL_TOKEN_COOKIE)
+    if not _verify_terminal_token(token):
+        await ws.close(code=1008, reason="Unauthorized")
+        return
+
     await ws.accept()
     loop = asyncio.get_running_loop()
 
