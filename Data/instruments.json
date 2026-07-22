@@ -5,12 +5,12 @@
     "string_names": ["E", "A", "D", "G", "B", "e"],
     "solenoids": {},
     "string_servos": {
-      "s0": { "servo_channel": 0, "up_angle": 60, "down_angle": 120 },
-      "s1": { "servo_channel": 1, "up_angle": 60, "down_angle": 120 },
-      "s2": { "servo_channel": 2, "up_angle": 60, "down_angle": 120 },
-      "s3": { "servo_channel": 3, "up_angle": 60, "down_angle": 120 },
-      "s4": { "servo_channel": 4, "up_angle": 60, "down_angle": 120 },
-      "s5": { "servo_channel": 5, "up_angle": 60, "down_angle": 120 }
+      "s0": { "servo_channel": 0, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 },
+      "s1": { "servo_channel": 1, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 },
+      "s2": { "servo_channel": 2, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 },
+      "s3": { "servo_channel": 3, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 },
+      "s4": { "servo_channel": 4, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 },
+      "s5": { "servo_channel": 5, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 }
     }
   },
   "bass": {
@@ -19,10 +19,10 @@
     "string_names": ["E", "A", "D", "G"],
     "solenoids": {},
     "string_servos": {
-      "s0": { "servo_channel": 6, "up_angle": 55, "down_angle": 125 },
-      "s1": { "servo_channel": 7, "up_angle": 55, "down_angle": 125 },
-      "s2": { "servo_channel": 8, "up_angle": 55, "down_angle": 125 },
-      "s3": { "servo_channel": 9, "up_angle": 55, "down_angle": 125 }
+      "s0": { "servo_channel": 6, "servo_up": 55, "servo_low": 125, "suppress_up_angle": 55, "suppress_down_angle": 125 },
+      "s1": { "servo_channel": 7, "servo_up": 55, "servo_low": 125, "suppress_up_angle": 55, "suppress_down_angle": 125 },
+      "s2": { "servo_channel": 8, "servo_up": 55, "servo_low": 125, "suppress_up_angle": 55, "suppress_down_angle": 125 },
+      "s3": { "servo_channel": 9, "servo_up": 55, "servo_low": 125, "suppress_up_angle": 55, "suppress_down_angle": 125 }
     }
   },
   "drums": {
@@ -30,10 +30,11 @@
       "kick": { "label": "Kick", "id": "" },
       "snare": { "label": "Snare", "id": "" },
       "hihat": { "label": "Hi-Hat", "id": "" },
+      "floor": { "label": "Floor Tom", "id": "" },
+      "low_tom": { "label": "Low Tom", "id": "" },
+      "high_tom": { "label": "High Tom", "id": "" },
       "crash": { "label": "Crash", "id": "" },
-      "tom1": { "label": "Tom 1", "id": "" },
-      "tom2": { "label": "Tom 2", "id": "" },
-      "floor": { "label": "Floor Tom", "id": "" }
+      "ride": { "label": "Ride", "id": "" }
     }
   }
 }

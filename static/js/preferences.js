@@ -3,13 +3,14 @@ import { api, coverUrl } from "./api.js";
 
 // Relative positions (%) of each drum on the generated kit image.
 const DRUM_POSITIONS = {
-  crash: { x: 24, y: 24 },
-  hihat: { x: 19, y: 54 },
-  tom1: { x: 43, y: 36 },
-  tom2: { x: 60, y: 36 },
-  snare: { x: 34, y: 62 },
-  floor: { x: 74, y: 58 },
-  kick: { x: 50, y: 80 },
+  crash: { x: 22, y: 18 },
+  hihat: { x: 18, y: 42 },
+  ride: { x: 84, y: 18 },
+  low_tom: { x: 42, y: 34 },
+  high_tom: { x: 62, y: 30 },
+  snare: { x: 34, y: 58 },
+  floor: { x: 74, y: 62 },
+  kick: { x: 50, y: 84 },
 };
 
 let config = null;
@@ -75,8 +76,10 @@ function stringColumn(name, cfg, sub) {
       <tr>
         <td>${names[s] ?? s + 1}</td>
         <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_channel" value="${servo.servo_channel ?? ""}" min="0" max="31" /></td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="up_angle" value="${servo.up_angle ?? 60}" min="0" max="180" /></td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="down_angle" value="${servo.down_angle ?? 120}" min="0" max="180" /></td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_up" value="${servo.servo_up ?? 60}" min="0" max="180" /></td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_low" value="${servo.servo_low ?? 120}" min="0" max="180" /></td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="suppress_up_angle" value="${servo.suppress_up_angle ?? 60}" min="0" max="180" /></td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="suppress_down_angle" value="${servo.suppress_down_angle ?? 120}" min="0" max="180" /></td>
       </tr>`;
   }
 
@@ -95,6 +98,8 @@ function stringColumn(name, cfg, sub) {
             <tr>
               <th>String</th>
               <th>Servo channel</th>
+              <th>Servo up</th>
+              <th>Servo low</th>
               <th>Suppress up angle</th>
               <th>Suppress down angle</th>
             </tr>
