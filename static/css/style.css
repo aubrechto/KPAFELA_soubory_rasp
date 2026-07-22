@@ -715,15 +715,37 @@ input:focus {
   color: var(--text);
 }
 
-/* drum kit */
-.drumkit {
-  position: relative;
+.servo-table-wrap {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.servo-table {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  border-collapse: collapse;
   background: var(--surface-2);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 18px;
+}
+
+.servo-table th,
+.servo-table td {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  text-align: left;
+}
+
+.servo-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+}
+
+.servo-table td input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
 }
 
 .drumkit img {

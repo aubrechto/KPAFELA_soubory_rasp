@@ -141,6 +141,8 @@ def _handle_mqtt_connection() -> None:
             manager.broadcast({"type": "mqtt", "mqtt": mqtt.connection_info()}),
             _loop,
         )
+    if mqtt.connected:
+        mqtt.publish_config("instruments", config.load("instruments"))
 
 
 mqtt = MqttManager(
@@ -163,6 +165,17 @@ async def lifespan(_app: FastAPI):
     global _loop
     _loop = asyncio.get_running_loop()
     mqtt.start()
+
+    # Publish the current instruments config at startup once the broker is connected.
+    if mqtt.connected:
+        mqtt.publish_config("instruments", config.load("instruments"))
+    else:
+        for _ in range(20):
+            await asyncio.sleep(0.1)
+            if mqtt.connected:
+                mqtt.publish_config("instruments", config.load("instruments"))
+                break
+
     task = asyncio.create_task(_ticker())
     logger.info("KAP{F}ELA controller ready")
     yield

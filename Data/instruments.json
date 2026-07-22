@@ -4,11 +4,13 @@
     "frets": 12,
     "string_names": ["E", "A", "D", "G", "B", "e"],
     "solenoids": {},
-    "pick": {
-      "servo_channel": 0,
-      "up_angle": 60,
-      "down_angle": 120,
-      "speed_ms": 120
+    "string_servos": {
+      "s0": { "servo_channel": 0, "up_angle": 60, "down_angle": 120 },
+      "s1": { "servo_channel": 1, "up_angle": 60, "down_angle": 120 },
+      "s2": { "servo_channel": 2, "up_angle": 60, "down_angle": 120 },
+      "s3": { "servo_channel": 3, "up_angle": 60, "down_angle": 120 },
+      "s4": { "servo_channel": 4, "up_angle": 60, "down_angle": 120 },
+      "s5": { "servo_channel": 5, "up_angle": 60, "down_angle": 120 }
     }
   },
   "bass": {
@@ -16,11 +18,11 @@
     "frets": 12,
     "string_names": ["E", "A", "D", "G"],
     "solenoids": {},
-    "pick": {
-      "servo_channel": 1,
-      "up_angle": 55,
-      "down_angle": 125,
-      "speed_ms": 140
+    "string_servos": {
+      "s0": { "servo_channel": 6, "up_angle": 55, "down_angle": 125 },
+      "s1": { "servo_channel": 7, "up_angle": 55, "down_angle": 125 },
+      "s2": { "servo_channel": 8, "up_angle": 55, "down_angle": 125 },
+      "s3": { "servo_channel": 9, "up_angle": 55, "down_angle": 125 }
     }
   },
   "drums": {

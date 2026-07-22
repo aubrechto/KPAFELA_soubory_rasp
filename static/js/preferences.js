@@ -66,7 +66,20 @@ function stringColumn(name, cfg, sub) {
     rows += "</tr>";
   }
 
-  const pick = cfg.pick || {};
+  const servos = cfg.string_servos || {};
+  let servoRows = "";
+  for (let s = 0; s < cfg.strings; s++) {
+    const key = `s${s}`;
+    const servo = servos[key] || {};
+    servoRows += `
+      <tr>
+        <td>${names[s] ?? s + 1}</td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_channel" value="${servo.servo_channel ?? ""}" min="0" max="31" /></td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="up_angle" value="${servo.up_angle ?? 60}" min="0" max="180" /></td>
+        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="down_angle" value="${servo.down_angle ?? 120}" min="0" max="180" /></td>
+      </tr>`;
+  }
+
   return `
   <div class="pref-col">
     <h3>${cap(name)}</h3>
@@ -75,26 +88,21 @@ function stringColumn(name, cfg, sub) {
       <table class="fret-table"><thead>${head}</thead><tbody>${rows}</tbody></table>
     </div>
     <div class="pick-box">
-      <h4>Pick control (servo)</h4>
-      <div class="field-row">
-        <div class="field">
-          <label>Servo channel</label>
-          <input type="number" data-pick="${name}" data-pkey="servo_channel" value="${pick.servo_channel ?? 0}" min="0" max="31" />
-        </div>
-        <div class="field">
-          <label>Speed (ms)</label>
-          <input type="number" data-pick="${name}" data-pkey="speed_ms" value="${pick.speed_ms ?? 120}" min="10" max="1000" />
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Up angle (&deg;)</label>
-          <input type="number" data-pick="${name}" data-pkey="up_angle" value="${pick.up_angle ?? 60}" min="0" max="180" />
-        </div>
-        <div class="field">
-          <label>Down angle (&deg;)</label>
-          <input type="number" data-pick="${name}" data-pkey="down_angle" value="${pick.down_angle ?? 120}" min="0" max="180" />
-        </div>
+      <h4>Servo control per string</h4>
+      <div class="servo-table-wrap">
+        <table class="servo-table">
+          <thead>
+            <tr>
+              <th>String</th>
+              <th>Servo channel</th>
+              <th>Suppress up angle</th>
+              <th>Suppress down angle</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${servoRows}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>`;
@@ -148,16 +156,22 @@ function wireDrumHotspots(view) {
 
 // ------------------------------------------------------------- collecting
 function collectInto(cfg, view) {
-  // Fretboard solenoids
+  // Fretboard solenoids and per-string servo mapping
   ["guitar", "bass"].forEach((inst) => {
     cfg[inst].solenoids = {};
     view.querySelectorAll(`[data-inst="${inst}"]`).forEach((input) => {
+      if (input.dataset.subkey) return;
       const v = input.value.trim();
       if (v) cfg[inst].solenoids[input.dataset.key] = v;
     });
-    // Pick control
-    view.querySelectorAll(`[data-pick="${inst}"]`).forEach((input) => {
-      cfg[inst].pick[input.dataset.pkey] = Number(input.value);
+
+    cfg[inst].string_servos = {};
+    view.querySelectorAll(`[data-inst="${inst}"][data-subkey]`).forEach((input) => {
+      const key = input.dataset.key;
+      const subkey = input.dataset.subkey;
+      const v = input.value.trim();
+      if (!cfg[inst].string_servos[key]) cfg[inst].string_servos[key] = {};
+      if (v !== "") cfg[inst].string_servos[key][subkey] = Number(v);
     });
   });
   // Drums
