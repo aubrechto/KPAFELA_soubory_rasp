@@ -34,8 +34,6 @@ export async function initPreferences() {
     </div>
   `;
 
-  wireDrumHotspots(view);
-
   view.querySelector("#prefs-save").addEventListener("click", async () => {
     collectInto(config, view);
     await api.saveInstruments(config);
@@ -132,23 +130,9 @@ function drumColumn(drums) {
     <p class="col-sub">Assign a solenoid / GPIO to each drum</p>
     <div class="drumkit">
       <img src="${coverUrl("drum-kit.png")}" alt="Drum kit" crossorigin="anonymous" />
-      ${hotspots}
     </div>
     <div class="drum-fields">${fields}</div>
   </div>`;
-}
-
-function wireDrumHotspots(view) {
-  view.querySelectorAll(".drum-hot").forEach((hot) => {
-    hot.addEventListener("click", () => {
-      const key = hot.dataset.drum;
-      const input = view.querySelector(`[data-drum-id="${key}"]`);
-      view.querySelectorAll(".drum-hot").forEach((h) => h.classList.remove("is-active"));
-      hot.classList.add("is-active");
-      input?.focus();
-      input?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-  });
 }
 
 // ------------------------------------------------------------- collecting
