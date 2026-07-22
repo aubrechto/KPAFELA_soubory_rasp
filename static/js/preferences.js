@@ -35,6 +35,7 @@ export async function initPreferences() {
   `;
 
   wireDrumHotspots(view);
+  wireSliderValues(view);
 
   view.querySelector("#prefs-save").addEventListener("click", async () => {
     collectInto(config, view);
@@ -75,11 +76,11 @@ function stringColumn(name, cfg, sub) {
     servoRows += `
       <tr>
         <td>${names[s] ?? s + 1}</td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_channel" value="${servo.servo_channel ?? ""}" min="0" max="31" /></td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_up" value="${servo.servo_up ?? 60}" min="0" max="180" /></td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="servo_low" value="${servo.servo_low ?? 120}" min="0" max="180" /></td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="suppress_up_angle" value="${servo.suppress_up_angle ?? 60}" min="0" max="180" /></td>
-        <td><input type="number" data-inst="${name}" data-key="${key}" data-subkey="suppress_down_angle" value="${servo.suppress_down_angle ?? 120}" min="0" max="180" /></td>
+        <td>${sliderCell(name, key, "servo_channel", servo.servo_channel ?? 0, 0, 31)}</td>
+        <td>${sliderCell(name, key, "servo_up", servo.servo_up ?? 60, 0, 180)}</td>
+        <td>${sliderCell(name, key, "servo_low", servo.servo_low ?? 120, 0, 180)}</td>
+        <td>${sliderCell(name, key, "suppress_up_angle", servo.suppress_up_angle ?? 60, 0, 180)}</td>
+        <td>${sliderCell(name, key, "suppress_down_angle", servo.suppress_down_angle ?? 120, 0, 180)}</td>
       </tr>`;
   }
 
@@ -120,7 +121,7 @@ function drumColumn(drums) {
     .map(([key, pad]) => {
       const pos = DRUM_POSITIONS[key] || { x: 50, y: 50 };
       return `<button type="button" class="drum-hot" data-drum="${key}"
-        style="left:${pos.x}%;top:${pos.y}%" title="${pad.label}">${pad.label.slice(0, 5)}</button>`;
+        style="left:${pos.x}%;top:${pos.y}%" title="${pad.label}"><span>${pad.label}</span></button>`;
     })
     .join("");
 
@@ -144,6 +145,25 @@ function drumColumn(drums) {
     </div>
     <div class="drum-fields">${fields}</div>
   </div>`;
+}
+
+function sliderCell(inst, key, subkey, value, min, max) {
+  return `
+    <div class="slider-cell">
+      <input type="range" data-inst="${inst}" data-key="${key}" data-subkey="${subkey}" value="${value}" min="${min}" max="${max}" />
+      <span class="slider-value">${value}</span>
+    </div>`;
+}
+
+function wireSliderValues(view) {
+  view.querySelectorAll(".slider-cell input[type=range]").forEach((slider) => {
+    const valueLabel = slider.closest(".slider-cell")?.querySelector(".slider-value");
+    if (valueLabel) {
+      slider.addEventListener("input", () => {
+        valueLabel.textContent = slider.value;
+      });
+    }
+  });
 }
 
 function wireDrumHotspots(view) {

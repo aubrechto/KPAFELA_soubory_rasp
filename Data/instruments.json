@@ -2,7 +2,7 @@
   "guitar": {
     "strings": 6,
     "frets": 12,
-    "string_names": ["E", "A", "D", "G", "B", "e"],
+    "string_names": ["E", "A", "D", "G", "H", "e"],
     "solenoids": {},
     "string_servos": {
       "s0": { "servo_channel": 0, "servo_up": 60, "servo_low": 120, "suppress_up_angle": 60, "suppress_down_angle": 120 },
