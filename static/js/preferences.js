@@ -116,14 +116,6 @@ function stringColumn(name, cfg, sub) {
 // ------------------------------------------------------------------ drums
 function drumColumn(drums) {
   const pads = drums.pads || {};
-  const hotspots = Object.entries(pads)
-    .map(([key, pad]) => {
-      const pos = DRUM_POSITIONS[key] || { x: 50, y: 50 };
-      return `<button type="button" class="drum-hot" data-drum="${key}"
-        style="left:${pos.x}%;top:${pos.y}%"></button>`;
-    })
-    .join("");
-
   const fields = Object.entries(pads)
     .map(
       ([key, pad]) => `
