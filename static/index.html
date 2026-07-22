@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <title>KAP{F}ELA &middot; Robotic Band Controller</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Sidebar navigation -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span class="brand-bracket">KAP</span><span class="brand-f">{F}</span><span class="brand-bracket">ELA</span>
+          </div>
+          <p class="brand-sub">Robotic Band</p>
+        </div>
+
+        <nav class="nav" aria-label="Primary">
+          <button class="nav-item is-active" data-view="player" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            <span>Player</span>
+          </button>
+          <button class="nav-item" data-view="settings" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.4-2.6a7.6 7.6 0 0 0 0-1.8l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.5-.9l-.4-2.6H9.4L9 3.6a7.4 7.4 0 0 0-1.5.9l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 1.8l-2 1.6 2 3.4 2.4-1c.5.4 1 .7 1.5.9l.4 2.6h5.2l.4-2.6c.5-.2 1-.5 1.5-.9l2.4 1 2-3.4-2-1.6z" /></svg>
+            <span>Settings</span>
+          </button>
+          <button class="nav-item" data-view="terminal" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zm0 5h6v2H4zm0 5h16v2H4z" /></svg>
+            <span>Terminal</span>
+          </button>
+          <button class="nav-item" data-view="preferences" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" /></svg>
+            <span>Instruments</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="mqtt-status" id="mqtt-status">
+            <span class="dot" id="mqtt-dot"></span>
+            <span id="mqtt-label">Connecting&hellip;</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main content -->
+      <main class="content">
+        <section id="view-player" class="view is-active" aria-label="Player"></section>
+        <section id="view-settings" class="view" aria-label="Settings"></section>
+        <section id="view-terminal" class="view" aria-label="Terminal"></section>
+        <section id="view-preferences" class="view" aria-label="Instrument Preferences"></section>
+      </main>
+
+      <!-- Persistent now-playing bar -->
+      <footer class="nowbar" id="nowbar" aria-label="Now playing"></footer>
+    </div>
+
+    <script type="module" src="/static/js/app.js"></script>
+  </body>
+</html>

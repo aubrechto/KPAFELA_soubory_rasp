@@ -1,0 +1,172 @@
+// Instrument Preferences view: hardware mapping for guitar, bass and drums.
+import { api, coverUrl } from "./api.js";
+
+// Relative positions (%) of each drum on the generated kit image.
+const DRUM_POSITIONS = {
+  crash: { x: 24, y: 24 },
+  hihat: { x: 19, y: 54 },
+  tom1: { x: 43, y: 36 },
+  tom2: { x: 60, y: 36 },
+  snare: { x: 34, y: 62 },
+  floor: { x: 74, y: 58 },
+  kick: { x: 50, y: 80 },
+};
+
+let config = null;
+
+export async function initPreferences() {
+  config = await api.getInstruments();
+  const view = document.getElementById("view-preferences");
+  view.innerHTML = `
+    <h1 class="page-title">Instrument Preferences</h1>
+    <p class="page-sub">Map every solenoid, servo and GPIO to the physical hardware.</p>
+
+    <div class="prefs-grid">
+      ${stringColumn("guitar", config.guitar, "Solenoid ID per string &amp; fret")}
+      ${stringColumn("bass", config.bass, "Solenoid ID per string &amp; fret")}
+      ${drumColumn(config.drums)}
+    </div>
+
+    <div class="save-row" style="margin-top:24px">
+      <button type="button" class="btn-save" id="prefs-save">Save hardware map</button>
+      <span class="save-note" id="prefs-note">Saved</span>
+    </div>
+  `;
+
+  wireDrumHotspots(view);
+
+  view.querySelector("#prefs-save").addEventListener("click", async () => {
+    collectInto(config, view);
+    await api.saveInstruments(config);
+    const note = view.querySelector("#prefs-note");
+    note.classList.add("show");
+    setTimeout(() => note.classList.remove("show"), 1800);
+  });
+}
+
+// ---------------------------------------------------- string instruments
+function stringColumn(name, cfg, sub) {
+  const names = cfg.string_names || [];
+  let head = "<tr><th></th>";
+  for (let f = 0; f <= cfg.frets; f++) {
+    head += `<th>${f === 0 ? "Open" : f}</th>`;
+  }
+  head += "</tr>";
+
+  let rows = "";
+  for (let s = 0; s < cfg.strings; s++) {
+    rows += `<tr><td class="string-name">${names[s] ?? s + 1}</td>`;
+    for (let f = 0; f <= cfg.frets; f++) {
+      const key = `s${s}-f${f}`;
+      const val = cfg.solenoids?.[key] ?? "";
+      rows += `<td class="fret-cell${f === 0 ? " open" : ""}">
+        <input data-inst="${name}" data-key="${key}" value="${val}" placeholder="ID" inputmode="numeric" />
+      </td>`;
+    }
+    rows += "</tr>";
+  }
+
+  const pick = cfg.pick || {};
+  return `
+  <div class="pref-col">
+    <h3>${cap(name)}</h3>
+    <p class="col-sub">${sub}</p>
+    <div class="fretboard">
+      <table class="fret-table"><thead>${head}</thead><tbody>${rows}</tbody></table>
+    </div>
+    <div class="pick-box">
+      <h4>Pick control (servo)</h4>
+      <div class="field-row">
+        <div class="field">
+          <label>Servo channel</label>
+          <input type="number" data-pick="${name}" data-pkey="servo_channel" value="${pick.servo_channel ?? 0}" min="0" max="31" />
+        </div>
+        <div class="field">
+          <label>Speed (ms)</label>
+          <input type="number" data-pick="${name}" data-pkey="speed_ms" value="${pick.speed_ms ?? 120}" min="10" max="1000" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Up angle (&deg;)</label>
+          <input type="number" data-pick="${name}" data-pkey="up_angle" value="${pick.up_angle ?? 60}" min="0" max="180" />
+        </div>
+        <div class="field">
+          <label>Down angle (&deg;)</label>
+          <input type="number" data-pick="${name}" data-pkey="down_angle" value="${pick.down_angle ?? 120}" min="0" max="180" />
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ------------------------------------------------------------------ drums
+function drumColumn(drums) {
+  const pads = drums.pads || {};
+  const hotspots = Object.entries(pads)
+    .map(([key, pad]) => {
+      const pos = DRUM_POSITIONS[key] || { x: 50, y: 50 };
+      return `<button type="button" class="drum-hot" data-drum="${key}"
+        style="left:${pos.x}%;top:${pos.y}%" title="${pad.label}">${pad.label.slice(0, 5)}</button>`;
+    })
+    .join("");
+
+  const fields = Object.entries(pads)
+    .map(
+      ([key, pad]) => `
+    <div class="drum-field" data-field="${key}">
+      <label>${pad.label}</label>
+      <input data-drum-id="${key}" value="${pad.id ?? ""}" placeholder="Solenoid / GPIO" />
+    </div>`
+    )
+    .join("");
+
+  return `
+  <div class="pref-col">
+    <h3>Drums</h3>
+    <p class="col-sub">Assign a solenoid / GPIO to each drum</p>
+    <div class="drumkit">
+      <img src="${coverUrl("drum-kit.png")}" alt="Drum kit" crossorigin="anonymous" />
+      ${hotspots}
+    </div>
+    <div class="drum-fields">${fields}</div>
+  </div>`;
+}
+
+function wireDrumHotspots(view) {
+  view.querySelectorAll(".drum-hot").forEach((hot) => {
+    hot.addEventListener("click", () => {
+      const key = hot.dataset.drum;
+      const input = view.querySelector(`[data-drum-id="${key}"]`);
+      view.querySelectorAll(".drum-hot").forEach((h) => h.classList.remove("is-active"));
+      hot.classList.add("is-active");
+      input?.focus();
+      input?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  });
+}
+
+// ------------------------------------------------------------- collecting
+function collectInto(cfg, view) {
+  // Fretboard solenoids
+  ["guitar", "bass"].forEach((inst) => {
+    cfg[inst].solenoids = {};
+    view.querySelectorAll(`[data-inst="${inst}"]`).forEach((input) => {
+      const v = input.value.trim();
+      if (v) cfg[inst].solenoids[input.dataset.key] = v;
+    });
+    // Pick control
+    view.querySelectorAll(`[data-pick="${inst}"]`).forEach((input) => {
+      cfg[inst].pick[input.dataset.pkey] = Number(input.value);
+    });
+  });
+  // Drums
+  view.querySelectorAll("[data-drum-id]").forEach((input) => {
+    const key = input.dataset.drumId;
+    if (cfg.drums.pads[key]) cfg.drums.pads[key].id = input.value.trim();
+  });
+}
+
+function cap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
