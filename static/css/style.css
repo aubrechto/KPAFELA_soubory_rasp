@@ -748,23 +748,6 @@ input:focus {
   color: var(--text);
 }
 
-.slider-cell {
-  display: grid;
-  gap: 6px;
-}
-
-.slider-cell input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
-  height: 22px;
-}
-
-.slider-cell .slider-value {
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: center;
-}
-
 .drum-hot {
   position: absolute;
   transform: translate(-50%, -50%);
