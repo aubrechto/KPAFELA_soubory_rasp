@@ -15,5 +15,4 @@ node_modules
 .DS_Store
 
 # Ignore large data blobs created outside source control
-/Data/
 /Data/zaloha/

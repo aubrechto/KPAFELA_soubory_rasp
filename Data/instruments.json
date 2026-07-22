@@ -1,0 +1,37 @@
+{
+  "guitar": {
+    "strings": 6,
+    "frets": 12,
+    "string_names": ["E", "A", "D", "G", "B", "e"],
+    "solenoids": {},
+    "pick": {
+      "servo_channel": 0,
+      "up_angle": 60,
+      "down_angle": 120,
+      "speed_ms": 120
+    }
+  },
+  "bass": {
+    "strings": 4,
+    "frets": 12,
+    "string_names": ["E", "A", "D", "G"],
+    "solenoids": {},
+    "pick": {
+      "servo_channel": 1,
+      "up_angle": 55,
+      "down_angle": 125,
+      "speed_ms": 140
+    }
+  },
+  "drums": {
+    "pads": {
+      "kick": { "label": "Kick", "id": "" },
+      "snare": { "label": "Snare", "id": "" },
+      "hihat": { "label": "Hi-Hat", "id": "" },
+      "crash": { "label": "Crash", "id": "" },
+      "tom1": { "label": "Tom 1", "id": "" },
+      "tom2": { "label": "Tom 2", "id": "" },
+      "floor": { "label": "Floor Tom", "id": "" }
+    }
+  }
+}

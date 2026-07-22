@@ -1,0 +1,39 @@
+{
+  "songs": [
+    {
+      "id": "song-01",
+      "title": "Iron Circuit",
+      "artist": "KAP{F}ELA",
+      "duration": 214,
+      "cover": "iron-circuit.png"
+    },
+    {
+      "id": "song-02",
+      "title": "Servo Blues",
+      "artist": "KAP{F}ELA",
+      "duration": 187,
+      "cover": "servo-blues.png"
+    },
+    {
+      "id": "song-03",
+      "title": "Solenoid Symphony",
+      "artist": "KAP{F}ELA",
+      "duration": 253,
+      "cover": "solenoid-symphony.png"
+    },
+    {
+      "id": "song-04",
+      "title": "Voltage Groove",
+      "artist": "KAP{F}ELA",
+      "duration": 199,
+      "cover": "voltage-groove.png"
+    },
+    {
+      "id": "song-05",
+      "title": "Machine Heartbeat",
+      "artist": "KAP{F}ELA",
+      "duration": 231,
+      "cover": "machine-heartbeat.png"
+    }
+  ]
+}

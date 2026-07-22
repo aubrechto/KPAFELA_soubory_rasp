@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = BASE_DIR / "Data"
 IMAGES_DIR = BASE_DIR / "static" / "images"
 
 _lock = threading.Lock()

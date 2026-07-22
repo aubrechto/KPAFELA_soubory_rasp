@@ -1,0 +1,7 @@
+{
+  "auto_enabled": false,
+  "start_time": "18:00",
+  "stop_time": "23:00",
+  "songs_before_break": 4,
+  "break_minutes": 15
+}

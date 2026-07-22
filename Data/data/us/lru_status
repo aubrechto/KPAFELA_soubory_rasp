@@ -1,0 +1,10 @@
+# LRU status
+version = 1
+subpath = us
+num-shards = 1
+table-size = 65536
+large-file-size = 1048576
+shard-index = 0
+num-hits = 106890
+time = 2022-08-14T16:27:37Z
+reset-time = 2022-08-14T16:22:26Z
