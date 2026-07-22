@@ -120,7 +120,7 @@ function drumColumn(drums) {
     .map(([key, pad]) => {
       const pos = DRUM_POSITIONS[key] || { x: 50, y: 50 };
       return `<button type="button" class="drum-hot" data-drum="${key}"
-        style="left:${pos.x}%;top:${pos.y}%" title="${pad.label}"></button>`;
+        style="left:${pos.x}%;top:${pos.y}%"></button>`;
     })
     .join("");
 

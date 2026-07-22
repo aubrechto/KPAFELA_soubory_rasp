@@ -740,12 +740,24 @@ input:focus {
 }
 
 .servo-table td input {
-  width: 100%;
-  padding: 8px 10px;
-  background: var(--surface);
+  width: 44px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 12px;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
   color: var(--text);
+}
+
+.servo-table td input::-webkit-inner-spin-button,
+.servo-table td input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.servo-table td input[type=number] {
+  -moz-appearance: textfield;
 }
 
 .drum-hot {
