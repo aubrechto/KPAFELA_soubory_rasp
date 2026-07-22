@@ -28,21 +28,24 @@ def format_payload(payload: bytes) -> str:
 
 def on_connect(client, userdata, flags, reason_code, properties=None) -> None:
     if reason_code == 0:
-        print(f"[connected] {userdata['host']}:{userdata['port']} subscribed to {userdata['topic']}")
+        print(f"[connected] {userdata['host']}:{userdata['port']} subscribed to {userdata['topic']}", flush=True)
         client.subscribe(userdata["topic"], qos=1)
     else:
-        print(f"[connect failed] reason={reason_code}")
+        print(f"[connect failed] reason={reason_code}", flush=True)
 
 
 def on_disconnect(client, userdata, rc) -> None:
-    print(f"[disconnected] rc={rc}")
+    print(f"[disconnected] rc={rc}", flush=True)
 
 
 def on_message(client, userdata, msg) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output = format_payload(msg.payload)
-    print(f"\n[{ts}] {msg.topic}")
-    print(output)
+    # Print header and then payload line-by-line with immediate flush so the
+    # web terminal UI can append and autoscroll for every printed line.
+    print(f"\n[{ts}] {msg.topic}", flush=True)
+    for line in str(output).splitlines():
+        print(line, flush=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,13 +72,13 @@ def main() -> int:
     try:
         client.connect(args.host, args.port, keepalive=30)
     except Exception as exc:
-        print(f"Failed to connect to MQTT broker {args.host}:{args.port}: {exc}")
+        print(f"Failed to connect to MQTT broker {args.host}:{args.port}: {exc}", flush=True)
         return 1
 
     try:
         client.loop_forever()
     except KeyboardInterrupt:
-        print("\nStopped by user")
+        print("\nStopped by user", flush=True)
     return 0
 
 
