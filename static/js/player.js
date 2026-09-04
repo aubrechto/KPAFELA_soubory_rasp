@@ -1,5 +1,5 @@
 // Player view: Spotify-style hero, transport, instrument cards, and queue.
-import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js";
+import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.2";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',

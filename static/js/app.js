@@ -1,8 +1,8 @@
 // App bootstrap: navigation, now-playing bar, and realtime wiring.
-import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js";
-import { initPlayer } from "./player.js";
-import { initSettings } from "./settings.js";
-import { initPreferences } from "./preferences.js";
+import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.2";
+import { initPlayer } from "./player.js?v=1.2";
+import { initSettings } from "./settings.js?v=1.2";
+import { initPreferences } from "./preferences.js?v=1.2";
 import { initTerminal } from "./terminal.js";
 
 const ICON = {
