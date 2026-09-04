@@ -224,6 +224,11 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
             name = parts[2]
             if state.set_instrument(name, data.get("status", "")):
                 changed = True
+            for key in ("time", "timestamp", "ntp_time"):
+                if key in data and state.set_instrument_time(name, data[key]):
+                    changed = True
+                if key in data:
+                    break
     if changed and _loop is not None:
         asyncio.run_coroutine_threadsafe(
             manager.broadcast(state.snapshot()), _loop

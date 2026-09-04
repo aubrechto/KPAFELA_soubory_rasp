@@ -7,6 +7,7 @@ callers can broadcast minimal updates over the WebSocket.
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 from . import config
@@ -28,6 +29,7 @@ class StateManager:
         self.queue: list[dict[str, Any]] = []
         self.index = 0
         self.instruments: dict[str, str] = {name: IDLE for name in INSTRUMENTS}
+        self.instrument_times: dict[str, Any] = {}
         self.reload_queue()
 
     # ------------------------------------------------------------------ queue
@@ -145,6 +147,13 @@ class StateManager:
                 return True
             return False
 
+    def set_instrument_time(self, name: str, value: Any) -> bool:
+        with self._lock:
+            if name not in self.instruments or not isinstance(value, (str, int, float)):
+                return False
+            self.instrument_times[name] = value
+            return True
+
     # -------------------------------------------------------------- simulation
     def tick(self, dt: float) -> bool:
         """Advance playback by ``dt`` seconds. Returns True if state changed."""
@@ -165,6 +174,7 @@ class StateManager:
             cur = self.current
             return {
                 "type": "state",
+                "server_time": time.time(),
                 "player": {
                     "status": self.status,
                     "position": round(self.position, 1),
@@ -174,4 +184,5 @@ class StateManager:
                 "queue": self.queue,
                 "library": self.library,
                 "instruments": dict(self.instruments),
+                "instrument_times": dict(self.instrument_times),
             }

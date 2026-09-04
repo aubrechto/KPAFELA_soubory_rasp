@@ -206,6 +206,28 @@ svg {
   margin-bottom: 4px;
 }
 
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.raspberry-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.raspberry-clock strong {
+  color: var(--text);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
 .page-sub {
   color: var(--text-muted);
   margin-bottom: 28px;
@@ -366,6 +388,13 @@ svg {
   font-size: 18px;
   font-weight: 700;
   text-transform: capitalize;
+}
+
+.instrument-time {
+  min-height: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .status-pill {
@@ -944,6 +973,13 @@ input:focus {
 }
 
 @media (max-width: 620px) {
+  .page-heading {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .raspberry-clock {
+    align-items: flex-start;
+  }
   .player-hero {
     flex-direction: column;
     align-items: flex-start;

@@ -7,6 +7,9 @@ export const store = {
   queue: [],
   library: [],
   instruments: { guitar: "idle", bass: "idle", drums: "idle" },
+  instrumentTimes: {},
+  serverTime: 0,
+  serverTimeReceivedAt: 0,
   mqtt: { connected: false, simulation: false, host: "", port: 0 },
 };
 
@@ -25,6 +28,11 @@ export function applySnapshot(snap) {
   if (snap.queue) store.queue = snap.queue;
   if (snap.library) store.library = snap.library;
   if (snap.instruments) store.instruments = snap.instruments;
+  if (snap.instrument_times) store.instrumentTimes = snap.instrument_times;
+  if (snap.server_time) {
+    store.serverTime = snap.server_time;
+    store.serverTimeReceivedAt = Date.now();
+  }
   if (snap.mqtt) store.mqtt = { ...store.mqtt, ...snap.mqtt };
   emit();
 }
@@ -80,6 +88,15 @@ export function fmtTime(seconds) {
   const s = Math.max(0, Math.floor(seconds || 0));
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export function fmtClock(value) {
+  if (typeof value === "string" && /^\d{1,2}:\d{2}(:\d{2})?$/.test(value)) {
+    return value;
+  }
+  const date = new Date(typeof value === "number" ? value * 1000 : value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 export function coverUrl(cover) {

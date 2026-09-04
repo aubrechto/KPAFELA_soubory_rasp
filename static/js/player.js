@@ -1,5 +1,5 @@
 // Player view: Spotify-style hero, transport, instrument cards, and queue.
-import { api, store, subscribe, fmtTime, coverUrl } from "./api.js";
+import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
@@ -14,8 +14,13 @@ const INSTRUMENTS = ["guitar", "bass", "drums"];
 export function initPlayer() {
   const view = document.getElementById("view-player");
   view.innerHTML = `
-    <h1 class="page-title">Now Playing</h1>
-    <p class="page-sub">Control the KAP{F}ELA robotic band in real time.</p>
+    <div class="page-heading">
+      <div>
+        <h1 class="page-title">Now Playing</h1>
+        <p class="page-sub">Control the KAP{F}ELA robotic band in real time.</p>
+      </div>
+      <div class="raspberry-clock"><span>Raspberry Pi</span><strong id="raspberry-time">--:--:--</strong></div>
+    </div>
 
     <div class="player-hero">
       <img class="hero-cover" id="hero-cover" alt="Album cover" crossorigin="anonymous" />
@@ -55,6 +60,7 @@ export function initPlayer() {
         <span class="instrument-name">${name}</span>
         <span class="status-pill idle" data-status>IDLE</span>
       </div>
+      <div class="instrument-time" data-instrument-time></div>
       <div class="instrument-actions">
         <button class="btn btn-play" data-icmd="play">Play</button>
         <button class="btn btn-stop" data-icmd="stop">Stop</button>
@@ -100,6 +106,7 @@ export function initPlayer() {
 
   subscribe(render);
   render();
+  setInterval(render, 1000);
 }
 
 let queueBuilt = false;
@@ -107,8 +114,13 @@ let queueBuilt = false;
 function render() {
   const view = document.getElementById("view-player");
   if (!view) return;
-  const { player, queue, instruments } = store;
+  const { player, queue, instruments, instrumentTimes } = store;
   const cur = player.current;
+
+  const raspberryNow = store.serverTime
+    ? store.serverTime + (Date.now() - store.serverTimeReceivedAt) / 1000
+    : Date.now() / 1000;
+  view.querySelector("#raspberry-time").textContent = fmtClock(raspberryNow);
 
   // Hero
   view.querySelector("#hero-cover").src = coverUrl(cur?.cover);
@@ -129,6 +141,9 @@ function render() {
     const pill = card.querySelector("[data-status]");
     pill.textContent = status.toUpperCase();
     pill.className = `status-pill ${status}`;
+    card.querySelector("[data-instrument-time]").textContent = fmtClock(
+      instrumentTimes[card.dataset.instrument]
+    );
   });
 
   // Queue (build once, then update highlight)
