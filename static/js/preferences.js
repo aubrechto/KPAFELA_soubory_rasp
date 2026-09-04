@@ -30,6 +30,7 @@ export async function initPreferences() {
 
     <div class="save-row" style="margin-top:24px">
       <button type="button" class="btn-save" id="prefs-save">Save hardware map</button>
+      <button type="button" class="btn-save btn-test" id="prefs-test">TEST</button>
       <span class="save-note" id="prefs-note">Saved</span>
     </div>
   `;
@@ -40,6 +41,23 @@ export async function initPreferences() {
     const note = view.querySelector("#prefs-note");
     note.classList.add("show");
     setTimeout(() => note.classList.remove("show"), 1800);
+  });
+
+  view.querySelector("#prefs-test").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await api.testInstruments();
+      const note = view.querySelector("#prefs-note");
+      note.textContent = "Test sent";
+      note.classList.add("show");
+      setTimeout(() => {
+        note.textContent = "Saved";
+        note.classList.remove("show");
+      }, 1800);
+    } finally {
+      button.disabled = false;
+    }
   });
 }
 

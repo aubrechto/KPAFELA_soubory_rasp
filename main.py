@@ -385,6 +385,12 @@ async def get_instruments() -> JSONResponse:
     return JSONResponse(config.load("instruments"))
 
 
+@app.post("/api/instruments/test")
+async def test_instruments() -> JSONResponse:
+    mqtt.publish_all_instruments("test")
+    return JSONResponse({"ok": True, "command": "test"})
+
+
 @app.post("/api/terminal/complete")
 async def terminal_complete(request: Request, body: dict[str, Any]) -> JSONResponse:
     token = request.cookies.get(TERMINAL_TOKEN_COOKIE)

@@ -47,6 +47,7 @@ export const api = {
   saveSettings: (data) => request("PUT", "/api/settings", data),
   getInstruments: () => request("GET", "/api/instruments"),
   saveInstruments: (data) => request("PUT", "/api/instruments", data),
+  testInstruments: () => request("POST", "/api/instruments/test"),
   player: (command, body) => request("POST", `/api/player/${command}`, body ?? {}),
   queueSong: (id) => request("POST", "/api/player/queue", { id }),
   playSong: (id) => request("POST", "/api/player/play-song", { id }),

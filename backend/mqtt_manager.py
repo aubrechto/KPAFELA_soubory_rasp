@@ -94,6 +94,9 @@ class MqttManager:
     def publish_instrument(self, name: str, command: str) -> None:
         self._publish(f"{TOPIC_INSTRUMENT}/{name}", {"command": command})
 
+    def publish_all_instruments(self, command: str) -> None:
+        self._publish(TOPIC_INSTRUMENT, {"command": command})
+
     def publish_config(self, name: str, config_data: dict[str, Any]) -> None:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
