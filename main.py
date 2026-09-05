@@ -35,6 +35,7 @@ logger = logging.getLogger("kapfela")
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+SONGS_DIR = BASE_DIR / "Data" / "songs"
 
 state = StateManager()
 
@@ -303,6 +304,21 @@ async def get_state() -> JSONResponse:
 @app.get("/api/playlist")
 async def get_playlist() -> JSONResponse:
     return JSONResponse(config.load("playlist"))
+
+
+@app.post("/api/songs/{song_id}/upload")
+async def upload_song(song_id: str) -> JSONResponse:
+    """Upload an existing converted song file to all three ESP devices."""
+    song_path = SONGS_DIR / f"{song_id}.msg"
+    if not song_path.is_file():
+        return JSONResponse({"error": "converted song not found"}, status_code=404)
+
+    results = {}
+    for instrument in INSTRUMENTS:
+        results[instrument] = await asyncio.to_thread(
+            mqtt.publish_song, instrument, song_id, song_path
+        )
+    return JSONResponse({"song_id": song_id, "uploaded": results})
 
 
 @app.post("/api/player/{command}")

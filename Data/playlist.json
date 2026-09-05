@@ -1,39 +1,170 @@
 {
   "songs": [
     {
-      "id": "song-01",
-      "title": "Iron Circuit",
-      "artist": "KAP{F}ELA",
-      "duration": 214,
-      "cover": "iron-circuit.png"
+      "id": "17e911b5edcddb44",
+      "file": "17e911b5edcddb44.msg",
+      "title": "He is a Pirate",
+      "artist": "Hans Zimmer",
+      "duration": 77.4,
+      "tempo": 200,
+      "measures": 86,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
     },
     {
-      "id": "song-02",
-      "title": "Servo Blues",
-      "artist": "KAP{F}ELA",
-      "duration": 187,
-      "cover": "servo-blues.png"
+      "id": "1b6cdc48252d7bf3",
+      "file": "1b6cdc48252d7bf3.msg",
+      "title": "Creep",
+      "artist": "Radiohead",
+      "duration": 98.06451612903226,
+      "tempo": 93,
+      "measures": 38,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
     },
     {
-      "id": "song-03",
-      "title": "Solenoid Symphony",
-      "artist": "KAP{F}ELA",
-      "duration": 253,
-      "cover": "solenoid-symphony.png"
+      "id": "5294ead3bc693814",
+      "file": "5294ead3bc693814.msg",
+      "title": "Top Gun",
+      "artist": "Harold Faltermeyer",
+      "duration": 69.23076923076923,
+      "tempo": 104,
+      "measures": 30,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
     },
     {
-      "id": "song-04",
-      "title": "Voltage Groove",
-      "artist": "KAP{F}ELA",
-      "duration": 199,
-      "cover": "voltage-groove.png"
+      "id": "687fa1baa0ba4e7e",
+      "file": "687fa1baa0ba4e7e.msg",
+      "title": "The Kill",
+      "artist": "30 Seconds to Mars",
+      "duration": 140.8695652173913,
+      "tempo": 92,
+      "measures": 72,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
     },
     {
-      "id": "song-05",
-      "title": "Machine Heartbeat",
-      "artist": "KAP{F}ELA",
-      "duration": 231,
-      "cover": "machine-heartbeat.png"
+      "id": "99aa404773b3e1c0",
+      "file": "99aa404773b3e1c0.msg",
+      "title": "Dooms Gate",
+      "artist": "Bobby Prince",
+      "duration": 96.0,
+      "tempo": 220,
+      "measures": 88,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
+    },
+    {
+      "id": "ac78743f37d68d10",
+      "file": "ac78743f37d68d10.msg",
+      "title": "Super Mario Theme",
+      "artist": "Nintendo",
+      "duration": 84.57142857142857,
+      "tempo": 105,
+      "measures": 37,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
+    },
+    {
+      "id": "aceb75ce7a1876c4",
+      "file": "aceb75ce7a1876c4.msg",
+      "title": "Game Of Thrones Theme",
+      "artist": "HBO",
+      "duration": 115.41176470588235,
+      "tempo": 170,
+      "measures": 109,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
+    },
+    {
+      "id": "adb2a47693815f7e",
+      "file": "adb2a47693815f7e.msg",
+      "title": "Minecraft Theme",
+      "artist": "Mojang",
+      "duration": 126.79245283018868,
+      "tempo": 53,
+      "measures": 28,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
+    },
+    {
+      "id": "b13b3c4c8f2d771b",
+      "file": "b13b3c4c8f2d771b.msg",
+      "title": "I Wanna Be Your Slave",
+      "artist": "Maneskin",
+      "duration": 66.08695652173913,
+      "tempo": 138,
+      "measures": 38,
+      "instruments": [
+        "guitar",
+        "bass",
+        "drums"
+      ]
+    },
+    {
+      "id": "c1b82bdc2944e7a0",
+      "file": "c1b82bdc2944e7a0.msg",
+      "title": "Enter Sandman",
+      "artist": "Metallica",
+      "duration": 66.34146341463415,
+      "tempo": 123,
+      "measures": 34,
+      "instruments": [
+        "drums",
+        "guitar",
+        "bass"
+      ]
+    },
+    {
+      "id": "c4c04a4210acdb21",
+      "file": "c4c04a4210acdb21.msg",
+      "title": "For Whom The Bell Tools",
+      "artist": "Metallica",
+      "duration": 122.03389830508475,
+      "tempo": 118,
+      "measures": 60,
+      "instruments": [
+        "drums",
+        "guitar",
+        "bass"
+      ]
+    },
+    {
+      "id": "f495911be040157c",
+      "file": "f495911be040157c.msg",
+      "title": "Portal",
+      "artist": "Johny Sins",
+      "duration": 5.853658536585366,
+      "tempo": 82,
+      "measures": 2,
+      "instruments": [
+        "drums"
+      ]
     }
   ]
 }

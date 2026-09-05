@@ -1,3 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 paho-mqtt==2.1.0
+ms3==2.6.4
+msgpack==1.1.2
+webcolors==1.5
+pandas==2.3.3
+numpy==1.26.4

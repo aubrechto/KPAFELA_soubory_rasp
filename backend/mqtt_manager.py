@@ -9,9 +9,11 @@ synthetic status acknowledgement is generated so the UI stays fully usable.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import threading
+from pathlib import Path
 from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
@@ -24,6 +26,7 @@ BROKER_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 TOPIC_ROOT = "kapfela"
 TOPIC_PLAYER = f"{TOPIC_ROOT}/player"
 TOPIC_INSTRUMENT = f"{TOPIC_ROOT}/instrument"
+TOPIC_SONG = f"{TOPIC_ROOT}/song"
 
 StatusHandler = Callable[[str, dict[str, Any]], None]
 
@@ -100,6 +103,47 @@ class MqttManager:
     def publish_config(self, name: str, config_data: dict[str, Any]) -> None:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
+    def publish_song(self, instrument: str, song_id: str, path: str | Path,
+                     chunk_size: int = 1024) -> bool:
+        """Upload one already-converted track file to an ESP in MQTT chunks."""
+        if self._client is None or not self.connected:
+            self.simulation = True
+            logger.info("SIM  -> song upload skipped: %s", path)
+            return False
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+
+        song_path = Path(path)
+        if not song_path.is_file():
+            raise FileNotFoundError(song_path)
+
+        size = song_path.stat().st_size
+        total_chunks = (size + chunk_size - 1) // chunk_size
+        topic = f"{TOPIC_SONG}/{instrument}/upload"
+        self._publish(topic, {
+            "command": "upload_start",
+            "song_id": song_id,
+            "size": size,
+            "sha256": _file_sha256(song_path),
+            "total_chunks": total_chunks,
+            "chunk_size": chunk_size,
+        })
+
+        with song_path.open("rb") as song_file:
+            for index in range(total_chunks):
+                chunk = song_file.read(chunk_size)
+                info = self._client.publish(topic, chunk, qos=1)
+                info.wait_for_publish()
+                logger.info("MQTT -> %s chunk %s/%s", topic, index + 1,
+                            total_chunks)
+
+        self._publish(topic, {
+            "command": "upload_finish",
+            "song_id": song_id,
+            "total_chunks": total_chunks,
+        })
+        return True
+
     def _publish(self, topic: str, data: dict[str, Any]) -> None:
         message = json.dumps(data)
         if self._client is not None and self.connected:
@@ -108,6 +152,14 @@ class MqttManager:
         else:
             self.simulation = True
             logger.info("SIM  -> %s %s", topic, message)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as song_file:
+        for chunk in iter(lambda: song_file.read(64 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
     # -------------------------------------------------------------- callbacks
     def _on_connect(self, client, userdata, flags, reason_code, properties=None) -> None:

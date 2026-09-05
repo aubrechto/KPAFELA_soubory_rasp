@@ -26,3 +26,19 @@ sudo ss -lunp | grep ':123'
 ```
 
 Skript je určen pro Raspberry Pi OS/Debian a vyžaduje připojení k internetu při instalaci, aby mohl Pi nejprve synchronizovat vlastní čas.
+
+## Knihovna skladeb
+
+Zdrojové MuseScore soubory jsou ve složce `songs`. Konvertor vytvoří pro každou
+skladbu jeden MessagePack soubor se stopami `guitar`, `bass` a `drums`:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+python tools/generate_songs.py -o Data/songs
+python tools/sync_playlist.py
+```
+
+Výstupy jsou v `Data/songs` a playlist v `Data/playlist.json`. Do playlistu se
+zařadí pouze skladby, které mají současně metadata `.json` i hotový `.msg` soubor.
