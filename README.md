@@ -30,12 +30,26 @@ Skript je určen pro Raspberry Pi OS/Debian a vyžaduje připojení k internetu 
 ## Wi-Fi access point pro ESP
 
 Raspberry Pi může vytvořit vlastní Wi-Fi síť pro ESP, DHCP server a MQTT broker.
-Na Raspberry spusť:
+AP je záměrně manuální: po rebootu se nespustí automaticky, takže Raspberry
+můžeš spravovat přes SSH v běžné síti. Při prvním nastavení spusť:
 
 ```bash
 cd /home/admin/KPAFELA_soubory_rasp
-sudo AP_SSID=KAPFELA-ESP AP_PASSWORD='zvol-heslo-8-znaku' bash scripts/setup_wifi_ap.sh
+sudo AP_SSID=KAPFELA-ESP AP_PASSWORD='kapfela-esp-1234' bash scripts/setup_wifi_ap.sh
 ```
+
+AP se po instalaci spustí ihned, ale po dalším rebootu zůstane vypnutý. Ruční
+spuštění a zastavení:
+
+```bash
+sudo bash scripts/start_wifi_ap.sh
+sudo bash scripts/stop_wifi_ap.sh
+```
+
+Pro SSH po rebootu připoj Raspberry přes Ethernet nebo jiné síťové rozhraní k
+běžné síti. Pokud používáš stejné `wlan0` jako AP, nemůže být současně běžným
+Wi-Fi klientem domácí sítě; v takovém případě použij Ethernet nebo druhý Wi-Fi
+adaptér.
 
 Výchozí síť používá adresu Raspberry `192.168.50.1`, DHCP rozsah
 `192.168.50.50-192.168.50.150`, MQTT broker na `192.168.50.1:1883` a dashboard
@@ -50,6 +64,25 @@ nmcli connection show --active
 systemctl status mosquitto
 ip address show wlan0
 ```
+
+Podrobnou diagnostiku AP spustíš:
+
+```bash
+sudo bash scripts/check_wifi_ap.sh
+```
+
+Před testem musí být ESP nastavené přesně na stejné hodnoty:
+
+```text
+SSID: KAPFELA-ESP
+heslo: kapfela-esp-1234
+MQTT: 192.168.50.1:1883
+```
+
+Pokud byl AP skript spuštěn s vlastním `AP_PASSWORD`, musí být stejné heslo
+zapsané také v ESP firmware. Hláška `SSID not found` znamená, že AP nevysílá,
+je vypnuté rádio, nebo ESP hledá jiné SSID; v takovém případě nejdřív spusť
+`check_wifi_ap.sh`.
 
 ## Knihovna skladeb
 

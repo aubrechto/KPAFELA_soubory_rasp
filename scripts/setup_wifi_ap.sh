@@ -24,6 +24,10 @@ if ! command -v ip >/dev/null 2>&1; then
     exit 1
 fi
 
+if command -v rfkill >/dev/null 2>&1; then
+    rfkill unblock wifi || true
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y hostapd dnsmasq mosquitto mosquitto-clients
@@ -68,8 +72,9 @@ if command -v nmcli >/dev/null 2>&1; then
     nmcli connection add type wifi ifname "$WIFI_INTERFACE" con-name kapfela-ap \
         ssid "$AP_SSID" wifi-sec.key-mgmt wpa-psk \
         wifi-sec.psk "$AP_PASSWORD" ipv4.method shared \
-        ipv4.addresses "$AP_IP/24" ipv6.method disabled connection.autoconnect yes
-    nmcli connection modify kapfela-ap 802-11-wireless.mode ap
+        ipv4.addresses "$AP_IP/24" ipv6.method disabled connection.autoconnect no
+    nmcli connection modify kapfela-ap 802-11-wireless.mode ap \
+        802-11-wireless.ssid "$AP_SSID" connection.autoconnect no
     nmcli connection up kapfela-ap
     systemctl disable --now hostapd dnsmasq >/dev/null 2>&1 || true
 elif command -v dhcpcd >/dev/null 2>&1; then
@@ -99,7 +104,8 @@ EOF
 systemctl enable --now mosquitto
 if [[ "$AP_BACKEND" == "hostapd + dnsmasq" ]]; then
     systemctl unmask hostapd >/dev/null 2>&1 || true
-    systemctl enable --now dnsmasq hostapd
+    systemctl disable dnsmasq hostapd >/dev/null 2>&1 || true
+    systemctl start dnsmasq hostapd
     systemctl restart dnsmasq hostapd
 fi
 systemctl restart mosquitto
