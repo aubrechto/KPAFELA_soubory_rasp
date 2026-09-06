@@ -5,6 +5,7 @@ WIFI_INTERFACE="${WIFI_INTERFACE:-wlan0}"
 AP_CONNECTION="${AP_CONNECTION:-kapfela-ap}"
 AP_SSID="${AP_SSID:-KAPFELA-ESP}"
 AP_IP="${AP_IP:-192.168.50.1}"
+AP_CHANNEL="${AP_CHANNEL:-6}"
 
 fail=0
 check() {
@@ -17,7 +18,7 @@ check() {
 }
 
 printf '=== KAPFELA Wi-Fi AP diagnostika ===\n'
-printf 'Rozhrani: %s\nSSID: %s\nOcekavana IP: %s\n\n' "$WIFI_INTERFACE" "$AP_SSID" "$AP_IP"
+printf 'Rozhrani: %s\nSSID: %s\nOcekavana IP: %s\nKanal: %s (2,4 GHz)\n\n' "$WIFI_INTERFACE" "$AP_SSID" "$AP_IP" "$AP_CHANNEL"
 
 check ip link show "$WIFI_INTERFACE"
 check rfkill list wifi

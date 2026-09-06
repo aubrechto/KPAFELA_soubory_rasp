@@ -53,8 +53,8 @@ adaptér.
 
 Výchozí síť používá adresu Raspberry `192.168.50.1`, DHCP rozsah
 `192.168.50.50-192.168.50.150`, MQTT broker na `192.168.50.1:1883` a dashboard
-na `http://192.168.50.1:8000`. ESP musí používat stejné SSID/heslo a jako MQTT
-hostitele adresu `192.168.50.1`.
+na `http://192.168.50.1:8000`. AP používá 2,4 GHz, režim `bg` a kanál 6.
+ESP musí používat stejné SSID/heslo a jako MQTT hostitele adresu `192.168.50.1`.
 
 Skript automaticky použije NetworkManager, pokud je na Raspberry dostupný;
 na starším Raspberry Pi OS použije `hostapd` a `dnsmasq`. Stav ověříš:

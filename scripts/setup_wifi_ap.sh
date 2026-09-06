@@ -14,6 +14,7 @@ AP_IP="${AP_IP:-192.168.50.1}"
 AP_CIDR="${AP_CIDR:-192.168.50.0/24}"
 DHCP_START="${DHCP_START:-192.168.50.50}"
 DHCP_END="${DHCP_END:-192.168.50.150}"
+AP_CHANNEL="${AP_CHANNEL:-6}"
 
 if [[ ${#AP_PASSWORD} -lt 8 ]]; then
     echo "AP_PASSWORD musi mit alespon 8 znaku." >&2
@@ -74,7 +75,9 @@ if command -v nmcli >/dev/null 2>&1; then
         wifi-sec.psk "$AP_PASSWORD" ipv4.method shared \
         ipv4.addresses "$AP_IP/24" ipv6.method disabled connection.autoconnect no
     nmcli connection modify kapfela-ap 802-11-wireless.mode ap \
-        802-11-wireless.ssid "$AP_SSID" connection.autoconnect no
+        802-11-wireless.ssid "$AP_SSID" \
+        802-11-wireless.band bg 802-11-wireless.channel "$AP_CHANNEL" \
+        connection.autoconnect no
     nmcli connection up kapfela-ap
     systemctl disable --now hostapd dnsmasq >/dev/null 2>&1 || true
 elif command -v dhcpcd >/dev/null 2>&1; then
