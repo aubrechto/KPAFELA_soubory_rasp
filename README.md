@@ -66,3 +66,34 @@ python tools/sync_playlist.py
 
 Výstupy jsou v `Data/songs` a playlist v `Data/playlist.json`. Do playlistu se
 zařadí pouze skladby, které mají současně metadata `.json` i hotový `.msg` soubor.
+
+## Kompletní převod a upload na ESP
+
+Po připojení Raspberry k MQTT síti spusť jeden příkaz:
+
+```bash
+python scripts/convert_and_upload.py
+```
+
+Skript postupně převede skladby, obnoví playlist, připojí se k MQTT a každou
+hotovou skladbu odešle na `guitar`, `bass` a `drums`. Po každém uploadu čeká na
+potvrzení `upload_finished` z ESP; při `upload_error` nebo timeoutu skončí s
+chybou.
+
+Pokud už jsou skladby převedené a chceš pouze opakovat upload:
+
+```bash
+python scripts/convert_and_upload.py --skip-convert
+```
+
+První test můžeš omezit jen na jedno zařízení:
+
+```bash
+python scripts/convert_and_upload.py --instruments guitar
+```
+
+Parametry pro jinou síť:
+
+```bash
+python scripts/convert_and_upload.py --mqtt-host 192.168.50.1 --mqtt-port 1883
+```
