@@ -27,6 +27,30 @@ sudo ss -lunp | grep ':123'
 
 Skript je určen pro Raspberry Pi OS/Debian a vyžaduje připojení k internetu při instalaci, aby mohl Pi nejprve synchronizovat vlastní čas.
 
+## Wi-Fi access point pro ESP
+
+Raspberry Pi může vytvořit vlastní Wi-Fi síť pro ESP, DHCP server a MQTT broker.
+Na Raspberry spusť:
+
+```bash
+cd /home/admin/KPAFELA_soubory_rasp
+sudo AP_SSID=KAPFELA-ESP AP_PASSWORD='zvol-heslo-8-znaku' bash scripts/setup_wifi_ap.sh
+```
+
+Výchozí síť používá adresu Raspberry `192.168.50.1`, DHCP rozsah
+`192.168.50.50-192.168.50.150`, MQTT broker na `192.168.50.1:1883` a dashboard
+na `http://192.168.50.1:8000`. ESP musí používat stejné SSID/heslo a jako MQTT
+hostitele adresu `192.168.50.1`.
+
+Skript automaticky použije NetworkManager, pokud je na Raspberry dostupný;
+na starším Raspberry Pi OS použije `hostapd` a `dnsmasq`. Stav ověříš:
+
+```bash
+nmcli connection show --active
+systemctl status mosquitto
+ip address show wlan0
+```
+
 ## Knihovna skladeb
 
 Zdrojové MuseScore soubory jsou ve složce `songs`. Konvertor vytvoří pro každou
