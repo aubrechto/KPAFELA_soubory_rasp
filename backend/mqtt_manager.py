@@ -154,13 +154,6 @@ class MqttManager:
             logger.info("SIM  -> %s %s", topic, message)
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as song_file:
-        for chunk in iter(lambda: song_file.read(64 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
     # -------------------------------------------------------------- callbacks
     def _on_connect(self, client, userdata, flags, reason_code, properties=None) -> None:
         if reason_code == 0:
@@ -190,3 +183,11 @@ def _file_sha256(path: Path) -> str:
             return
         if self.on_status:
             self.on_status(msg.topic, data)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as song_file:
+        for chunk in iter(lambda: song_file.read(64 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
