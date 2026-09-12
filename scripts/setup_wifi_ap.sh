@@ -14,7 +14,9 @@ AP_IP="${AP_IP:-192.168.50.1}"
 AP_CIDR="${AP_CIDR:-192.168.50.0/24}"
 DHCP_START="${DHCP_START:-192.168.50.50}"
 DHCP_END="${DHCP_END:-192.168.50.150}"
+AP_BAND="${AP_BAND:-bg}"
 AP_CHANNEL="${AP_CHANNEL:-6}"
+AP_COUNTRY="${AP_COUNTRY:-US}"
 
 if [[ ${#AP_PASSWORD} -lt 8 ]]; then
     echo "AP_PASSWORD musi mit alespon 8 znaku." >&2
@@ -45,14 +47,19 @@ cat > /etc/hostapd/hostapd.conf <<EOF
 interface=$WIFI_INTERFACE
 driver=nl80211
 ssid=$AP_SSID
+country_code=$AP_COUNTRY
 hw_mode=g
-channel=6
+channel=$AP_CHANNEL
+ieee80211d=0
+ieee80211n=0
+ieee80211ac=0
 wmm_enabled=0
 auth_algs=1
 ignore_broadcast_ssid=0
 wpa=2
 wpa_passphrase=$AP_PASSWORD
 wpa_key_mgmt=WPA-PSK
+wpa_pairwise=CCMP
 rsn_pairwise=CCMP
 EOF
 
@@ -72,11 +79,13 @@ if command -v nmcli >/dev/null 2>&1; then
     nmcli connection delete kapfela-ap >/dev/null 2>&1 || true
     nmcli connection add type wifi ifname "$WIFI_INTERFACE" con-name kapfela-ap \
         ssid "$AP_SSID" wifi-sec.key-mgmt wpa-psk \
-        wifi-sec.psk "$AP_PASSWORD" ipv4.method shared \
+        wifi-sec.proto rsn wifi-sec.psk "$AP_PASSWORD" ipv4.method shared \
         ipv4.addresses "$AP_IP/24" ipv6.method disabled connection.autoconnect no
     nmcli connection modify kapfela-ap 802-11-wireless.mode ap \
         802-11-wireless.ssid "$AP_SSID" \
-        802-11-wireless.band bg 802-11-wireless.channel "$AP_CHANNEL" \
+        802-11-wireless.band "$AP_BAND" 802-11-wireless.channel "$AP_CHANNEL" \
+        802-11-wireless-security.proto rsn \
+        802-11-wireless-security.pairwise ccmp \
         connection.autoconnect no
     nmcli connection up kapfela-ap
     systemctl disable --now hostapd dnsmasq >/dev/null 2>&1 || true
