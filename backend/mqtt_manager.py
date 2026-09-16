@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -72,6 +73,18 @@ class MqttManager:
                 "MQTT broker unavailable (%s) - running in simulation mode", exc
             )
             self._notify_connection()
+            threading.Thread(target=self._retry_loop, daemon=True).start()
+
+    def _retry_loop(self) -> None:
+        time.sleep(5)
+        while self._client is None and not self.connected:
+            logger.info("Retrying MQTT connection to %s:%s", BROKER_HOST, BROKER_PORT)
+            try:
+                self.start()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("MQTT retry failed: %s", exc)
+            if not self.connected:
+                time.sleep(5)
 
     def stop(self) -> None:
         if self._client is not None:
@@ -152,7 +165,6 @@ class MqttManager:
         else:
             self.simulation = True
             logger.info("SIM  -> %s %s", topic, message)
-
 
     # -------------------------------------------------------------- callbacks
     def _on_connect(self, client, userdata, flags, reason_code, properties=None) -> None:
