@@ -271,8 +271,8 @@ async def lifespan(_app: FastAPI):
     if mqtt.connected:
         mqtt.publish_config("instruments", config.load("instruments"))
     else:
-        for _ in range(20):
-            await asyncio.sleep(0.1)
+        for _ in range(60):
+            await asyncio.sleep(0.5)
             if mqtt.connected:
                 mqtt.publish_config("instruments", config.load("instruments"))
                 break
