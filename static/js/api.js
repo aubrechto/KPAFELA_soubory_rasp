@@ -8,6 +8,7 @@ export const store = {
   library: [],
   instruments: { guitar: "idle", bass: "idle", drums: "idle" },
   instrumentTimes: {},
+  timeSync: { skew: {}, max_skew: 0, in_sync: false },
   serverTime: 0,
   serverTimeReceivedAt: 0,
   mqtt: { connected: false, simulation: false, host: "", port: 0 },
@@ -29,6 +30,7 @@ export function applySnapshot(snap) {
   if (snap.library) store.library = snap.library;
   if (snap.instruments) store.instruments = snap.instruments;
   if (snap.instrument_times) store.instrumentTimes = snap.instrument_times;
+  if (snap.time_sync) store.timeSync = snap.time_sync;
   if (snap.server_time) {
     store.serverTime = snap.server_time;
     store.serverTimeReceivedAt = Date.now();

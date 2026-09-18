@@ -1,5 +1,5 @@
 // Instrument Preferences view: hardware mapping for guitar, bass and drums.
-import { api, coverUrl } from "./api.js?v=1.3";
+import { api, coverUrl } from "./api.js?v=1.4";
 
 // Relative positions (%) of each drum on the generated kit image.
 const DRUM_POSITIONS = {

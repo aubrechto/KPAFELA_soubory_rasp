@@ -33,6 +33,10 @@ Chrony je nastavené s `local stratum 10`, takže Pi rozdává svůj čas ESP za
 
 Nastavení hodin vyžaduje sudoers pravidlo, které setup skript vytvoří v `/etc/sudoers.d/kapfela-time` pro uživatele `admin` (jiného uživatele nastav přes `KAPFELA_USER`).
 
+### Ověření synchronizace času na ESP
+
+Každá ESP deska se po připojení k Wi-Fi synchronizuje přes NTP z Raspberry Pi (`192.168.50.1`) a svůj čas posílá v MQTT status zprávě (`ntp_time`). Dashboard u každého instrumentu zobrazuje jeho živý čas; pokud se odchylka vůči Raspberry Pi překročí 0,5 s, čas se zvýrazní oranžově a tooltip ukáže přesnou odchylku. Backend odchylku počítá z `ntp_time` kompenzovaného o stáří poslední status zprávy.
+
 ## Wi-Fi access point pro ESP
 
 Raspberry Pi může vytvořit vlastní Wi-Fi síť pro ESP, DHCP server a MQTT broker.

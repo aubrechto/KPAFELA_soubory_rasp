@@ -1,5 +1,5 @@
 // Player view: Spotify-style hero, transport, instrument cards, and queue.
-import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.3";
+import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.4";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
@@ -136,14 +136,21 @@ function render() {
   view.querySelector("#hero-total").textContent = fmtTime(total);
 
   // Instruments
+  const skews = store.timeSync?.skew || {};
   view.querySelectorAll("[data-instrument]").forEach((card) => {
     const status = instruments[card.dataset.instrument] || "idle";
     const pill = card.querySelector("[data-status]");
     pill.textContent = status.toUpperCase();
     pill.className = `status-pill ${status}`;
-    card.querySelector("[data-instrument-time]").textContent = fmtClock(
-      instrumentTimes[card.dataset.instrument]
-    );
+    const timeEl = card.querySelector("[data-instrument-time]");
+    timeEl.textContent = fmtClock(instrumentTimes[card.dataset.instrument]);
+    const skew = skews[card.dataset.instrument];
+    const outOfSync = typeof skew === "number" && Math.abs(skew) > 0.5;
+    timeEl.classList.toggle("out-of-sync", outOfSync);
+    timeEl.title =
+      typeof skew === "number"
+        ? `Odchylka od Raspberry Pi: ${skew > 0 ? "+" : ""}${skew.toFixed(2)} s`
+        : "";
   });
 
   // Queue (build once, then update highlight)

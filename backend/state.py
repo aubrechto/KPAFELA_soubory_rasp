@@ -30,6 +30,7 @@ class StateManager:
         self.index = 0
         self.instruments: dict[str, str] = {name: IDLE for name in INSTRUMENTS}
         self.instrument_times: dict[str, Any] = {}
+        self.instrument_time_received: dict[str, float] = {}
         self.reload_queue()
 
     # ------------------------------------------------------------------ queue
@@ -152,6 +153,7 @@ class StateManager:
             if name not in self.instruments or not isinstance(value, (str, int, float)):
                 return False
             self.instrument_times[name] = value
+            self.instrument_time_received[name] = time.time()
             return True
 
     # -------------------------------------------------------------- simulation
@@ -172,9 +174,25 @@ class StateManager:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             cur = self.current
+            now = time.time()
+            # Numeric instrument times are extrapolated by the age of the
+            # last MQTT status so the dashboard shows live clock values.
+            effective_times: dict[str, Any] = {}
+            for name, value in self.instrument_times.items():
+                if isinstance(value, (int, float)):
+                    received = self.instrument_time_received.get(name, now)
+                    effective_times[name] = round(value + (now - received), 3)
+                else:
+                    effective_times[name] = value
+            skew = {
+                name: round(value - now, 3)
+                for name, value in effective_times.items()
+                if isinstance(value, (int, float))
+            }
+            max_skew = max((abs(v) for v in skew.values()), default=0.0)
             return {
                 "type": "state",
-                "server_time": time.time(),
+                "server_time": now,
                 "player": {
                     "status": self.status,
                     "position": round(self.position, 1),
@@ -184,5 +202,10 @@ class StateManager:
                 "queue": self.queue,
                 "library": self.library,
                 "instruments": dict(self.instruments),
-                "instrument_times": dict(self.instrument_times),
+                "instrument_times": effective_times,
+                "time_sync": {
+                    "skew": skew,
+                    "max_skew": round(max_skew, 3),
+                    "in_sync": bool(skew) and max_skew <= 0.5,
+                },
             }

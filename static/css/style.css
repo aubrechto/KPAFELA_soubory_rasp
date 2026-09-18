@@ -397,6 +397,11 @@ svg {
   font-variant-numeric: tabular-nums;
 }
 
+.instrument-time.out-of-sync {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 .status-pill {
   font-size: 11px;
   font-weight: 700;
