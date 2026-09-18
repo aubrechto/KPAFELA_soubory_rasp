@@ -27,6 +27,12 @@ sudo ss -lunp | grep ':123'
 
 Skript je určen pro Raspberry Pi OS/Debian a vyžaduje připojení k internetu při instalaci, aby mohl Pi nejprve synchronizovat vlastní čas.
 
+### Čas bez internetu
+
+Chrony je nastavené s `local stratum 10`, takže Pi rozdává svůj čas ESP zařízením i když samo není synchronizované z internetu. Když otevřeš dashboard v prohlížeči (notebook, tablet), stránka automaticky pošle svůj čas na `/api/time/sync` a Pi podle něj nastaví systémové hodiny (max. 1x za 5 minut a jen při odchylce větší než 2 s). Aktuální čas Pi je vidět v hlavičce stránky Player.
+
+Nastavení hodin vyžaduje sudoers pravidlo, které setup skript vytvoří v `/etc/sudoers.d/kapfela-time` pro uživatele `admin` (jiného uživatele nastav přes `KAPFELA_USER`).
+
 ## Wi-Fi access point pro ESP
 
 Raspberry Pi může vytvořit vlastní Wi-Fi síť pro ESP, DHCP server a MQTT broker.
@@ -44,6 +50,22 @@ spuštění a zastavení:
 ```bash
 sudo bash scripts/start_wifi_ap.sh
 sudo bash scripts/stop_wifi_ap.sh
+```
+
+### Automatické spuštění AP po bootu
+
+Pokud chceš, aby se AP zapnul hned po startu Raspberry Pi, spusť jednou:
+
+```bash
+sudo bash scripts/enable_wifi_ap_autostart.sh
+```
+
+Skript pozná používaný backend: s NetworkManagerem nastaví `connection.autoconnect yes` na spojení `kapfela-ap`, na starším systému povolí služby `hostapd` a `dnsmasq`. Vrácení na manuální režim:
+
+```bash
+sudo nmcli connection modify kapfela-ap connection.autoconnect no
+# nebo na starším systému:
+sudo systemctl disable hostapd dnsmasq
 ```
 
 Pro SSH po rebootu připoj Raspberry přes Ethernet nebo jiné síťové rozhraní k

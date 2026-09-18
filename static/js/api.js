@@ -56,6 +56,7 @@ export const api = {
   getInstruments: () => request("GET", "/api/instruments"),
   saveInstruments: (data) => request("PUT", "/api/instruments", data),
   testInstruments: () => request("POST", "/api/instruments/test"),
+  syncTime: (time) => request("POST", "/api/time/sync", { time }),
   player: (command, body) => request("POST", `/api/player/${command}`, body ?? {}),
   queueSong: (id) => request("POST", "/api/player/queue", { id }),
   playSong: (id) => request("POST", "/api/player/play-song", { id }),
@@ -70,6 +71,10 @@ export function connectSocket() {
 
   function open() {
     const ws = new WebSocket(url);
+    ws.onopen = () => {
+      // Offer the browser's clock to the Pi (used when the Pi is offline).
+      api.syncTime(Date.now() / 1000).catch(() => {});
+    };
     ws.onmessage = (evt) => {
       try {
         applySnapshot(JSON.parse(evt.data));

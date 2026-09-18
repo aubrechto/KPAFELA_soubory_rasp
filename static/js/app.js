@@ -1,8 +1,8 @@
 // App bootstrap: navigation, now-playing bar, and realtime wiring.
-import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.2";
-import { initPlayer } from "./player.js?v=1.2";
-import { initSettings } from "./settings.js?v=1.2";
-import { initPreferences } from "./preferences.js?v=1.2";
+import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.3";
+import { initPlayer } from "./player.js?v=1.3";
+import { initSettings } from "./settings.js?v=1.3";
+import { initPreferences } from "./preferences.js?v=1.3";
 import { initTerminal } from "./terminal.js";
 
 const ICON = {
@@ -120,6 +120,8 @@ async function main() {
   // Seed state via REST, then keep it live over WebSocket.
   try {
     applySnapshot(await api.getState());
+    // Offer the browser's clock to the Pi (used when the Pi is offline).
+    await api.syncTime(Date.now() / 1000).catch(() => {});
   } catch (err) {
     console.log("[v0] initial state fetch failed", err);
   }

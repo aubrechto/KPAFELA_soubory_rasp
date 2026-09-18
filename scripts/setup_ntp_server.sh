@@ -40,11 +40,27 @@ if ! grep -q '^# KAPFELA NTP server$' "$CHRONY_CONF"; then
 allow $WIFI_CIDR
 makestep 1.0 3
 rtcsync
+local stratum 10
 EOF
+fi
+
+# Serve the Pi's own clock even when it is not synchronized from the internet,
+# so the ESP devices stay in sync with each other in offline mode.
+if ! grep -q '^local stratum' "$CHRONY_CONF"; then
+    echo 'local stratum 10' >> "$CHRONY_CONF"
 fi
 
 systemctl enable --now chrony
 systemctl restart chrony
+
+# Allow the dashboard service user to set the system clock without a password,
+# so the web UI can sync the Pi's time from the browser when offline.
+SERVICE_USER="${KAPFELA_USER:-admin}"
+DATE_BIN="$(command -v date)"
+if [[ -n "$DATE_BIN" ]]; then
+    echo "$SERVICE_USER ALL=(root) NOPASSWD: $DATE_BIN" > /etc/sudoers.d/kapfela-time
+    chmod 440 /etc/sudoers.d/kapfela-time
+fi
 
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q '^Status: active'; then
     ufw allow from "$WIFI_CIDR" to any port 123 proto udp comment 'KAPFELA local NTP'

@@ -160,6 +160,12 @@ TERMINAL_COMMAND_HINTS = [
 ]
 terminal_sessions: dict[str, float] = {}
 
+# Minimum clock drift (seconds) before the dashboard is allowed to set the
+# system time, and the minimum interval between two accepted syncs.
+TIME_SYNC_MIN_DELTA = 2.0
+TIME_SYNC_MIN_INTERVAL = 300.0
+_last_time_sync = 0.0
+
 
 def _terminal_password() -> str:
     settings = config.load("settings")
@@ -383,6 +389,50 @@ async def put_settings(body: dict[str, Any]) -> JSONResponse:
     saved = config.save("settings", current)
     mqtt.publish_config("settings", saved)
     return JSONResponse(saved)
+
+
+@app.post("/api/time/sync")
+async def time_sync(body: dict[str, Any]) -> JSONResponse:
+    """Set the Pi's system clock from the dashboard browser.
+
+    Used when the Pi has no internet connection: the notebook/tablet that
+    opened the dashboard provides the correct time, which the Pi then
+    serves to the ESP devices over NTP (chrony 'local stratum 10').
+    """
+    global _last_time_sync
+    try:
+        client_time = float(body.get("time", 0))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "invalid time"}, status_code=400)
+    now = time.time()
+    delta = client_time - now
+    if abs(delta) < TIME_SYNC_MIN_DELTA:
+        return JSONResponse({"synced": False, "reason": "in-sync", "delta": round(delta, 3)})
+    if now - _last_time_sync < TIME_SYNC_MIN_INTERVAL:
+        return JSONResponse({"synced": False, "reason": "throttled", "delta": round(delta, 3)})
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["sudo", "-n", "date", "-s", f"@{client_time:.3f}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("time sync failed: %s", exc)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    if result.returncode != 0:
+        logger.warning("time sync failed: %s", result.stderr.strip())
+        return JSONResponse(
+            {"error": result.stderr.strip() or "date command failed"},
+            status_code=500,
+        )
+    _last_time_sync = time.time()
+    logger.info("System time synced from dashboard (delta %.1f s)", delta)
+    snap = state.snapshot()
+    snap["mqtt"] = mqtt.connection_info()
+    await manager.broadcast(snap)
+    return JSONResponse({"synced": True, "delta": round(delta, 3)})
 
 
 @app.post("/api/terminal/login")
