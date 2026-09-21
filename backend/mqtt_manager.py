@@ -120,6 +120,16 @@ class MqttManager:
     def publish_config(self, name: str, config_data: dict[str, Any]) -> None:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
+    def publish_instruments_config(self, config_data: dict[str, Any]) -> None:
+        """Publish each instrument's config on its own topic.
+
+        The full instruments JSON is larger than the ESP MQTT buffer, so each
+        instrument receives only its own section on kapfela/instrument/<name>.
+        """
+        for name, instrument_config in config_data.items():
+            if isinstance(instrument_config, dict):
+                self._publish(f"{TOPIC_INSTRUMENT}/{name}", {name: instrument_config})
+
     def publish_song(self, instrument: str, song_id: str, path: str | Path,
                      chunk_size: int = 1024) -> bool:
         """Upload one already-converted track file to an ESP in MQTT chunks."""

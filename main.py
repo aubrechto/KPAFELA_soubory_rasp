@@ -279,7 +279,7 @@ def _handle_mqtt_connection() -> None:
             _loop,
         )
     if mqtt.connected:
-        mqtt.publish_config("instruments", config.load("instruments"))
+        mqtt.publish_instruments_config(config.load("instruments"))
 
 
 mqtt = MqttManager(
@@ -306,12 +306,12 @@ async def lifespan(_app: FastAPI):
 
     # Publish the current instruments config at startup once the broker is connected.
     if mqtt.connected:
-        mqtt.publish_config("instruments", config.load("instruments"))
+        mqtt.publish_instruments_config(config.load("instruments"))
     else:
         for _ in range(60):
             await asyncio.sleep(0.5)
             if mqtt.connected:
-                mqtt.publish_config("instruments", config.load("instruments"))
+                mqtt.publish_instruments_config(config.load("instruments"))
                 break
 
     task = asyncio.create_task(_ticker())
@@ -506,7 +506,7 @@ async def terminal_complete(request: Request, body: dict[str, Any]) -> JSONRespo
 @app.put("/api/instruments")
 async def put_instruments(body: dict[str, Any]) -> JSONResponse:
     saved = config.save("instruments", body)
-    mqtt.publish_config("instruments", saved)
+    mqtt.publish_instruments_config(saved)
     return JSONResponse(saved)
 
 
