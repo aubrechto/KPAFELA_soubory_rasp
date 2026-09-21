@@ -12,6 +12,7 @@ export const store = {
   serverTime: 0,
   serverTimeReceivedAt: 0,
   mqtt: { connected: false, simulation: false, host: "", port: 0 },
+  instrumentsConfig: null,
 };
 
 export function subscribe(fn) {
@@ -35,6 +36,7 @@ export function applySnapshot(snap) {
     store.serverTime = snap.server_time;
     store.serverTimeReceivedAt = Date.now();
   }
+  if (snap.instruments_config) store.instrumentsConfig = snap.instruments_config;
   if (snap.mqtt) store.mqtt = { ...store.mqtt, ...snap.mqtt };
   emit();
 }

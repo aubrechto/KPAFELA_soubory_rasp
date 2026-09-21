@@ -216,6 +216,36 @@ def _complete_terminal_suggestions(prefix: str) -> list[str]:
     return [cmd for cmd in TERMINAL_COMMAND_HINTS if cmd.startswith(prefix)]
 
 
+def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+    """Merge source into target recursively (dicts only), in place."""
+    for key, value in source.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
+    return target
+
+
+def _handle_mqtt_mapping(name: str, data: dict[str, Any]) -> None:
+    """Store a pin/servo mapping published by an ESP and notify dashboards."""
+    if name not in INSTRUMENTS:
+        return
+    incoming = data.get(name, data)
+    if not isinstance(incoming, dict):
+        return
+    instruments = config.load("instruments")
+    _deep_merge(instruments.setdefault(name, {}), incoming)
+    saved = config.save("instruments", instruments)
+    logger.info("Mapping from ESP '%s' stored to instruments config", name)
+    if _loop is not None:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast(
+                {"type": "instruments_config", "instruments_config": saved}
+            ),
+            _loop,
+        )
+
+
 def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
     """Apply an ESP status message coming back over MQTT to local state."""
     changed = False
@@ -255,6 +285,7 @@ def _handle_mqtt_connection() -> None:
 mqtt = MqttManager(
     on_status=_handle_mqtt_status,
     on_connection=_handle_mqtt_connection,
+    on_mapping=_handle_mqtt_mapping,
 )
 _loop: asyncio.AbstractEventLoop | None = None
 

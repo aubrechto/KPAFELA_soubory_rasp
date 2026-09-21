@@ -31,6 +31,8 @@ TOPIC_SONG = f"{TOPIC_ROOT}/song"
 
 StatusHandler = Callable[[str, dict[str, Any]], None]
 
+MappingHandler = Callable[[str, dict[str, Any]], None]
+
 
 ConnectionHandler = Callable[[], None]
 
@@ -40,9 +42,11 @@ class MqttManager:
         self,
         on_status: StatusHandler | None = None,
         on_connection: ConnectionHandler | None = None,
+        on_mapping: MappingHandler | None = None,
     ) -> None:
         self.on_status = on_status
         self.on_connection = on_connection
+        self.on_mapping = on_mapping
         self.connected = False
         self.simulation = False
         self._client: mqtt.Client | None = None
@@ -186,6 +190,16 @@ class MqttManager:
         self._notify_connection()
 
     def _on_message(self, client, userdata, msg) -> None:
+        # Pin/servo mapping published by an ESP: kapfela/instrument/<name>/mapping
+        if msg.topic.endswith("/mapping"):
+            parts = msg.topic.split("/")
+            if len(parts) >= 4 and parts[1] == "instrument" and self.on_mapping:
+                try:
+                    data = json.loads(msg.payload.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    return
+                self.on_mapping(parts[2], data)
+            return
         # Only react to status topics coming back from the ESP devices.
         if not msg.topic.endswith("/status"):
             return

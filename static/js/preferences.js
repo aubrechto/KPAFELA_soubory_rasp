@@ -1,5 +1,5 @@
 // Instrument Preferences view: hardware mapping for guitar, bass and drums.
-import { api, coverUrl } from "./api.js?v=1.4";
+import { api, coverUrl, subscribe } from "./api.js?v=1.5";
 
 // Relative positions (%) of each drum on the generated kit image.
 const DRUM_POSITIONS = {
@@ -14,9 +14,12 @@ const DRUM_POSITIONS = {
 };
 
 let config = null;
+let unsubscribe = null;
+let lastAppliedConfig = null;
 
 export async function initPreferences() {
   config = await api.getInstruments();
+  lastAppliedConfig = config;
   const view = document.getElementById("view-preferences");
   view.innerHTML = `
     <h1 class="page-title">Instrument Preferences</h1>
@@ -58,6 +61,38 @@ export async function initPreferences() {
     } finally {
       button.disabled = false;
     }
+  });
+
+  // Live updates: when an ESP publishes its mapping over MQTT, the backend
+  // broadcasts it here and the tables get overwritten with the ESP values.
+  if (unsubscribe) unsubscribe();
+  unsubscribe = subscribe((s) => {
+    if (!s.instrumentsConfig || s.instrumentsConfig === lastAppliedConfig) return;
+    lastAppliedConfig = s.instrumentsConfig;
+    config = s.instrumentsConfig;
+    applyToView(view, config);
+  });
+}
+
+// Overwrite every mapping input with values from the given config.
+// The field the user is currently editing (focused) is left alone.
+function applyToView(view, cfg) {
+  view.querySelectorAll("[data-inst]").forEach((input) => {
+    if (input === document.activeElement) return;
+    const inst = cfg[input.dataset.inst];
+    if (!inst) return;
+    if (input.dataset.subkey) {
+      const servo = inst.string_servos?.[input.dataset.key];
+      const value = servo?.[input.dataset.subkey];
+      if (value !== undefined) input.value = value;
+    } else {
+      input.value = inst.solenoids?.[input.dataset.key] ?? "";
+    }
+  });
+  view.querySelectorAll("[data-drum-id]").forEach((input) => {
+    if (input === document.activeElement) return;
+    const value = cfg.drums?.pads?.[input.dataset.drumId]?.id;
+    if (value !== undefined) input.value = value;
   });
 }
 
