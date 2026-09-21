@@ -143,14 +143,22 @@ function render() {
     pill.textContent = status.toUpperCase();
     pill.className = `status-pill ${status}`;
     const timeEl = card.querySelector("[data-instrument-time]");
-    timeEl.textContent = fmtClock(instrumentTimes[card.dataset.instrument]);
-    const skew = skews[card.dataset.instrument];
-    const outOfSync = typeof skew === "number" && Math.abs(skew) > 0.5;
-    timeEl.classList.toggle("out-of-sync", outOfSync);
-    timeEl.title =
-      typeof skew === "number"
-        ? `Odchylka od Raspberry Pi: ${skew > 0 ? "+" : ""}${skew.toFixed(2)} s`
-        : "";
+    const rawTime = instrumentTimes[card.dataset.instrument];
+    // If ESP reports 0 (epoch), it means NTP is not synced yet.
+    if (rawTime === 0 || rawTime === "0") {
+      timeEl.textContent = "waiting for NTP...";
+      timeEl.classList.add("out-of-sync");
+      timeEl.title = "ESP is waiting for NTP sync from Raspberry Pi";
+    } else {
+      timeEl.textContent = fmtClock(rawTime);
+      const skew = skews[card.dataset.instrument];
+      const outOfSync = typeof skew === "number" && Math.abs(skew) > 0.5;
+      timeEl.classList.toggle("out-of-sync", outOfSync);
+      timeEl.title =
+        typeof skew === "number"
+          ? `Odchylka od Raspberry Pi: ${skew > 0 ? "+" : ""}${skew.toFixed(2)} s`
+          : "";
+    }
   });
 
   // Queue (build once, then update highlight)
