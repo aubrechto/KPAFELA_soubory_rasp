@@ -385,7 +385,9 @@ async def player_command(command: str, body: dict[str, Any] | None = None) -> JS
         state.select(int(body.get("index", 0)))
         mqtt.publish_player("play", {"song": state.current})
     elif command == "seek":
-        state.seek(float(body.get("position", 0)))
+        position = float(body.get("position", 0))
+        state.seek(position)
+        mqtt.publish_player("seek", {"position": position})
     elif command == "queue":
         if not state.add_to_queue(str(body.get("id", ""))):
             return JSONResponse({"error": "unknown song"}, status_code=404)
