@@ -273,9 +273,14 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
 
 
 def _handle_mqtt_connection() -> None:
+    if not mqtt.connected:
+        # Bez brokeru se na ESP nedostane nic -> ukazat je jako vypnute.
+        state.mark_instruments_off()
     if _loop is not None:
+        snapshot = state.snapshot()
+        snapshot["mqtt"] = mqtt.connection_info()
         asyncio.run_coroutine_threadsafe(
-            manager.broadcast({"type": "mqtt", "mqtt": mqtt.connection_info()}),
+            manager.broadcast(snapshot),
             _loop,
         )
     if mqtt.connected:
@@ -398,7 +403,8 @@ async def player_command(command: str, body: dict[str, Any] | None = None) -> JS
 async def instrument_command(name: str, command: str) -> JSONResponse:
     if name not in INSTRUMENTS:
         return JSONResponse({"error": "unknown instrument"}, status_code=404)
-    mapping = {"play": "playing", "stop": "idle", "off": "off", "on": "idle"}
+    mapping = {"play": "playing", "stop": "idle", "off": "off", "on": "idle",
+               "reboot": "idle"}
     status = mapping.get(command)
     if status is None:
         return JSONResponse({"error": "unknown command"}, status_code=400)

@@ -64,7 +64,7 @@ export function initPlayer() {
       <div class="instrument-actions">
         <button class="btn btn-play" data-icmd="play">Play</button>
         <button class="btn btn-stop" data-icmd="stop">Stop</button>
-        <button class="btn btn-ghost" data-icmd="off">Off</button>
+        <button class="btn btn-ghost" data-icmd="reboot">Reboot</button>
       </div>
     </div>`
   ).join("");

@@ -28,7 +28,7 @@ class StateManager:
         self.library: list[dict[str, Any]] = []
         self.queue: list[dict[str, Any]] = []
         self.index = 0
-        self.instruments: dict[str, str] = {name: IDLE for name in INSTRUMENTS}
+        self.instruments: dict[str, str] = {name: OFF for name in INSTRUMENTS}
         self.instrument_times: dict[str, Any] = {}
         self.instrument_time_received: dict[str, float] = {}
         self.reload_queue()
@@ -147,6 +147,14 @@ class StateManager:
                 self.instruments[name] = status
                 return True
             return False
+
+    def mark_instruments_off(self) -> bool:
+        """Force every instrument to OFF (e.g. when the MQTT broker drops)."""
+        with self._lock:
+            changed = any(status != OFF for status in self.instruments.values())
+            for name in INSTRUMENTS:
+                self.instruments[name] = OFF
+            return changed
 
     def set_instrument_time(self, name: str, value: Any) -> bool:
         with self._lock:
