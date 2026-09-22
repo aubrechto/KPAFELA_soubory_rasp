@@ -16,6 +16,7 @@ INSTRUMENTS = ("guitar", "bass", "drums")
 
 # Instrument status values reported to / from the ESP devices.
 PLAYING = "playing"
+PAUSED = "paused"
 IDLE = "idle"
 OFF = "off"
 
@@ -89,10 +90,13 @@ class StateManager:
         player is paused or stopped, those instruments fall back to IDLE.
         """
         playing = self.status == "playing"
+        paused = self.status == "paused"
         for name in INSTRUMENTS:
             if self.instruments[name] == OFF:
                 continue
-            self.instruments[name] = PLAYING if playing else IDLE
+            self.instruments[name] = (
+                PLAYING if playing else (PAUSED if paused else IDLE)
+            )
 
     def play(self) -> None:
         with self._lock:
@@ -143,7 +147,7 @@ class StateManager:
     # ------------------------------------------------------------ instruments
     def set_instrument(self, name: str, status: str) -> bool:
         with self._lock:
-            if name in self.instruments and status in (PLAYING, IDLE, OFF):
+            if name in self.instruments and status in (PLAYING, PAUSED, IDLE, OFF):
                 self.instruments[name] = status
                 return True
             return False
