@@ -173,3 +173,11 @@ Parametry pro jinou síť:
 ```bash
 python scripts/convert_and_upload.py --mqtt-host 192.168.50.1 --mqtt-port 1883
 ```
+
+Pokud upload náhodně padá s `ESP <nástroj> nepotvrdilo skladbu ...` (slabší
+Wi-Fi signál nezvládne rychlost chunků), skript to teď sám 2x zopakuje;
+počet pokusů i pauzu mezi chunky lze upravit:
+
+```bash
+python scripts/convert_and_upload.py --chunk-delay 0.02 --retries 3
+```

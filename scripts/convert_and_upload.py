@@ -32,7 +32,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mqtt-user")
     parser.add_argument("--mqtt-password")
     parser.add_argument("--chunk-size", type=int, default=1024)
+    parser.add_argument("--chunk-delay", type=float, default=0.01,
+                        help="pauza mezi chunky (s), aby ESP stihlo MQTT zpracovat")
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--retries", type=int, default=2,
+                        help="kolikrat zopakovat upload jedne skladby po timeoutu/chybe")
     parser.add_argument("--skip-convert", action="store_true")
     parser.add_argument("--instruments", nargs="+", choices=INSTRUMENTS,
                         default=list(INSTRUMENTS))
@@ -128,6 +132,12 @@ class UploadClient:
             for index in range(total_chunks):
                 chunk = song_file.read(self.args.chunk_size)
                 self.client.publish(topic, chunk, qos=1).wait_for_publish()
+                # Broker ack neznamena, ze to ESP uz zpracovalo - bez male
+                # pauzy prijde dalsi chunk driv, nez ESP stihne zavolat
+                # mqttClient_.loop(), coz na slabsim Wi-Fi signalu (bass)
+                # nahodne rozbiji prenos uprostred.
+                if self.args.chunk_delay > 0:
+                    time.sleep(self.args.chunk_delay)
                 if (index + 1) % 25 == 0 or index + 1 == total_chunks:
                     logger.info("%s %s: chunk %d/%d", song_id, instrument,
                                 index + 1, total_chunks)
@@ -165,7 +175,19 @@ def main() -> int:
         for path in files:
             song_id = path.stem
             for instrument in args.instruments:
-                uploader.upload(instrument, song_id, path)
+                attempt = 0
+                while True:
+                    try:
+                        uploader.upload(instrument, song_id, path)
+                        break
+                    except (TimeoutError, RuntimeError):
+                        if attempt >= args.retries:
+                            raise
+                        attempt += 1
+                        logger.warning(
+                            "%s %s: upload selhal, zkousim znovu (%d/%d)",
+                            song_id, instrument, attempt, args.retries,
+                        )
         logger.info("Hotovo: %d skladeb odeslano na %d ESP", len(files),
                     len(args.instruments))
     finally:
