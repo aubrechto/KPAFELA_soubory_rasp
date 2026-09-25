@@ -120,13 +120,19 @@ class MqttManager:
     def publish_config(self, name: str, config_data: dict[str, Any]) -> None:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
-    def publish_time(self, name: str) -> None:
-        """Push the Pi's current clock to one ESP right after it connects.
+    def publish_time(self, name: str, t0_ms: Any = None) -> None:
+        """Push the Pi's current clock to one ESP so it can (re)sync.
 
         The ESP applies this epoch directly instead of pulling it itself via
         NTP, so every instrument ends up synchronized to the same source.
+        When ``t0_ms`` (the ESP's own millis() at request time) is echoed
+        back, the ESP can measure the round-trip and compensate for network
+        latency instead of taking the epoch at face value.
         """
-        self._publish(f"{TOPIC_INSTRUMENT}/{name}/time", {"epoch": time.time()})
+        payload: dict[str, Any] = {"epoch": time.time()}
+        if t0_ms is not None:
+            payload["t0_ms"] = t0_ms
+        self._publish(f"{TOPIC_INSTRUMENT}/{name}/time", payload)
 
     def publish_instruments_config(self, config_data: dict[str, Any]) -> None:
         """Publish each instrument's config on its own topic.
@@ -208,6 +214,16 @@ class MqttManager:
         self._notify_connection()
 
     def _on_message(self, client, userdata, msg) -> None:
+        # ESP asking to (re)sync its clock: kapfela/instrument/<name>/time_request
+        if msg.topic.endswith("/time_request"):
+            parts = msg.topic.split("/")
+            if len(parts) >= 4 and parts[1] == "instrument":
+                try:
+                    data = json.loads(msg.payload.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    data = {}
+                self.publish_time(parts[2], data.get("t0_ms"))
+            return
         # Pin/servo mapping published by an ESP: kapfela/instrument/<name>/mapping
         if msg.topic.endswith("/mapping"):
             parts = msg.topic.split("/")

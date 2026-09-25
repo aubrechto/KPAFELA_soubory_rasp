@@ -35,7 +35,18 @@ Nastavení hodin vyžaduje sudoers pravidlo, které setup skript vytvoří v `/e
 
 ### Ověření synchronizace času na ESP
 
-Každá ESP deska se po připojení k Wi-Fi nejprve zkusí synchronizovat čas přes NTP z Raspberry Pi (`192.168.50.1`). Jakmile ESP publikuje status s `ntp_synced: false` (tedy je právě připojené a ještě nemá platný čas), backend mu rovnou pošle vlastní čas Raspberry Pi přes MQTT topic `kapfela/instrument/<nastroj>/time` (payload `{"epoch": <unix čas>}`) a ESP si podle něj nastaví hodiny přímo, místo aby čekalo na NTP. Díky tomu jsou všechny nástroje synchronizované na stejný zdroj i v případě, že by SNTP dotaz selhal. ESP svůj aktuální čas posílá zpět v MQTT status zprávě (`ntp_time`). Dashboard u každého instrumentu zobrazuje jeho živý čas; pokud se odchylka vůči Raspberry Pi překročí 0,5 s, čas se zvýrazní oranžově a tooltip ukáže přesnou odchylku. Backend odchylku počítá z `ntp_time` kompenzovaného o stáří poslední status zprávy.
+Každá ESP deska se po připojení k Wi-Fi nejprve zkusí synchronizovat čas přes NTP z Raspberry Pi (`192.168.50.1`). Jakmile ESP publikuje status s `ntp_synced: false` (tedy je právě připojené a ještě nemá platný čas), backend mu rovnou pošle vlastní čas Raspberry Pi přes MQTT topic `kapfela/instrument/<nastroj>/time` (payload `{"epoch": <unix čas>}`) a ESP si podle něj nastaví hodiny přímo, místo aby čekalo na NTP.
+
+Kromě toho si ESP hned po připojení a pak každou minutu samo vyžádá přesnější
+resync: pošle `kapfela/instrument/<nastroj>/time_request` s vlastním `t0_ms`
+(`millis()`), backend okamžitě odpoví na `.../time` s `epoch` a stejným
+`t0_ms` zpět. ESP z rozdílu `millis() - t0_ms` spočítá round-trip a půlku
+zpoždění přičte k epoše, takže se kompenzuje síťové/MQTT zpoždění místo
+naivního "co přijde, to nastavím". Pravidelné opakování navíc opravuje
+přirozený drift krystalu ESP32 (řádově desetiny sekundy za hodinu), takže
+odchylka na dashboardu zůstává trvale nízká, ne jen hned po startu.
+
+ESP svůj aktuální čas posílá zpět v MQTT status zprávě (`ntp_time`). Dashboard u každého instrumentu zobrazuje jeho živý čas; pokud se odchylka vůči Raspberry Pi překročí 0,5 s, čas se zvýrazní oranžově a tooltip ukáže přesnou odchylku. Backend odchylku počítá z `ntp_time` kompenzovaného o stáří poslední status zprávy.
 
 ## Wi-Fi access point pro ESP
 
@@ -48,13 +59,18 @@ cd /home/admin/KPAFELA_soubory_rasp
 sudo AP_SSID=KAPFELA-ESP AP_PASSWORD='kapfela-esp-1234' bash scripts/setup_wifi_ap.sh
 ```
 
-AP se po instalaci spustí ihned, ale po dalším rebootu zůstane vypnutý. Ruční
-spuštění a zastavení:
+AP se po instalaci spustí ihned, ale po dalším rebootu zůstane vypnutý (pokud
+nezapneš autostart, viz níže). Ruční spuštění a zastavení:
 
 ```bash
 sudo bash scripts/start_wifi_ap.sh
 sudo bash scripts/stop_wifi_ap.sh
 ```
+
+`stop_wifi_ap.sh` je vhodný, když se potřebuješ dočasně připojit k běžné síti
+(např. kvůli aktualizaci) - jde jen o aktuální relaci. Po zapnutém autostartu
+(viz níže) se AP po každém rebootu spustí znovu bez ohledu na to, k jaké síti
+byl `wlan0` naposledy připojený.
 
 ### Automatické spuštění AP po bootu
 
@@ -64,9 +80,10 @@ Pokud chceš, aby se AP zapnul hned po startu Raspberry Pi, spusť jednou:
 sudo bash scripts/enable_wifi_ap_autostart.sh
 ```
 
-Skript pozná používaný backend: s NetworkManagerem nastaví `connection.autoconnect yes` na spojení `kapfela-ap`, na starším systému povolí služby `hostapd` a `dnsmasq`. Vrácení na manuální režim:
+Skript pozná používaný backend: s NetworkManagerem nastaví `connection.autoconnect yes` a nejvyšší prioritu na spojení `kapfela-ap` a navíc založí službu `kapfela-ap.service`, která po každém rebootu AP vynutí zapnuté - i když jsi mezitím přes `stop_wifi_ap.sh` přepnul `wlan0` na běžnou síť. Na starším systému povolí služby `hostapd` a `dnsmasq`. Vrácení na manuální režim:
 
 ```bash
+sudo systemctl disable --now kapfela-ap.service
 sudo nmcli connection modify kapfela-ap connection.autoconnect no
 # nebo na starším systému:
 sudo systemctl disable hostapd dnsmasq
