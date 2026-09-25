@@ -120,6 +120,14 @@ class MqttManager:
     def publish_config(self, name: str, config_data: dict[str, Any]) -> None:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
+    def publish_time(self, name: str) -> None:
+        """Push the Pi's current clock to one ESP right after it connects.
+
+        The ESP applies this epoch directly instead of pulling it itself via
+        NTP, so every instrument ends up synchronized to the same source.
+        """
+        self._publish(f"{TOPIC_INSTRUMENT}/{name}/time", {"epoch": time.time()})
+
     def publish_instruments_config(self, config_data: dict[str, Any]) -> None:
         """Publish each instrument's config on its own topic.
 

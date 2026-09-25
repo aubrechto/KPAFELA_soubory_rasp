@@ -35,7 +35,7 @@ Nastavení hodin vyžaduje sudoers pravidlo, které setup skript vytvoří v `/e
 
 ### Ověření synchronizace času na ESP
 
-Každá ESP deska se po připojení k Wi-Fi synchronizuje přes NTP z Raspberry Pi (`192.168.50.1`) a svůj čas posílá v MQTT status zprávě (`ntp_time`). Dashboard u každého instrumentu zobrazuje jeho živý čas; pokud se odchylka vůči Raspberry Pi překročí 0,5 s, čas se zvýrazní oranžově a tooltip ukáže přesnou odchylku. Backend odchylku počítá z `ntp_time` kompenzovaného o stáří poslední status zprávy.
+Každá ESP deska se po připojení k Wi-Fi nejprve zkusí synchronizovat čas přes NTP z Raspberry Pi (`192.168.50.1`). Jakmile ESP publikuje status s `ntp_synced: false` (tedy je právě připojené a ještě nemá platný čas), backend mu rovnou pošle vlastní čas Raspberry Pi přes MQTT topic `kapfela/instrument/<nastroj>/time` (payload `{"epoch": <unix čas>}`) a ESP si podle něj nastaví hodiny přímo, místo aby čekalo na NTP. Díky tomu jsou všechny nástroje synchronizované na stejný zdroj i v případě, že by SNTP dotaz selhal. ESP svůj aktuální čas posílá zpět v MQTT status zprávě (`ntp_time`). Dashboard u každého instrumentu zobrazuje jeho živý čas; pokud se odchylka vůči Raspberry Pi překročí 0,5 s, čas se zvýrazní oranžově a tooltip ukáže přesnou odchylku. Backend odchylku počítá z `ntp_time` kompenzovaného o stáří poslední status zprávy.
 
 ## Wi-Fi access point pro ESP
 

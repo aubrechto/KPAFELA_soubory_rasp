@@ -266,6 +266,10 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
                     changed = True
                 if key in data:
                     break
+            # ESP just (re)connected and hasn't got a valid clock yet - push
+            # the Pi's own time to it instead of waiting for it to be pulled.
+            if name in INSTRUMENTS and data.get("ntp_synced") is False:
+                mqtt.publish_time(name)
     if changed and _loop is not None:
         asyncio.run_coroutine_threadsafe(
             manager.broadcast(state.snapshot()), _loop
