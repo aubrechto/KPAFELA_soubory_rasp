@@ -1,5 +1,5 @@
 // Player view: Spotify-style hero, transport, instrument cards, and queue.
-import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.5";
+import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.6";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
@@ -58,9 +58,11 @@ export function initPlayer() {
       <img class="instrument-img" src="${coverUrl(name + ".png")}" alt="${name}" crossorigin="anonymous" />
       <div class="instrument-head">
         <span class="instrument-name">${name}</span>
+        <span class="command-indicator is-live" data-command-indicator aria-label="Command ACK potvrzen" title="Command ACK potvrzen"><span class="dot"></span></span>
         <span class="status-pill idle" data-status>IDLE</span>
       </div>
       <div class="instrument-time" data-instrument-time></div>
+      <div class="instrument-wifi" data-instrument-wifi>Wi-Fi: čekám na data</div>
       <div class="instrument-actions">
         <button class="btn btn-play" data-icmd="play">Play</button>
         <button class="btn btn-stop" data-icmd="stop">Stop</button>
@@ -75,9 +77,9 @@ export function initPlayer() {
     if (!btn) return;
     const cmd = btn.dataset.cmd;
     if (cmd === "toggle") {
-      api.player(store.player.status === "playing" ? "pause" : "play");
+      void api.player(store.player.status === "playing" ? "pause" : "play").catch(() => {});
     } else {
-      api.player(cmd);
+      void api.player(cmd).catch(() => {});
     }
   });
 
@@ -87,7 +89,7 @@ export function initPlayer() {
     if (!cur) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    api.player("seek", { position: ratio * cur.duration });
+    void api.player("seek", { position: ratio * cur.duration }).catch(() => {});
   });
 
   // Instrument events
@@ -95,13 +97,13 @@ export function initPlayer() {
     const btn = e.target.closest("[data-icmd]");
     if (!btn) return;
     const name = btn.closest("[data-instrument]").dataset.instrument;
-    api.instrument(name, btn.dataset.icmd);
+    void api.instrument(name, btn.dataset.icmd).catch(() => {});
   });
 
   // Queue events (delegated; rows built on first render)
   view.querySelector("#queue").addEventListener("click", (e) => {
     const row = e.target.closest("[data-index]");
-    if (row) api.player("select", { index: Number(row.dataset.index) });
+    if (row) void api.player("select", { index: Number(row.dataset.index) }).catch(() => {});
   });
 
   subscribe(render);
@@ -114,7 +116,7 @@ let queueBuilt = false;
 function render() {
   const view = document.getElementById("view-player");
   if (!view) return;
-  const { player, queue, instruments, instrumentTimes } = store;
+  const { player, queue, instruments, instrumentTimes, instrumentWifi } = store;
   const cur = player.current;
 
   const raspberryNow = store.serverTime
@@ -142,7 +144,37 @@ function render() {
     const pill = card.querySelector("[data-status]");
     pill.textContent = status.toUpperCase();
     pill.className = `status-pill ${status}`;
+    const commandIndicator = card.querySelector("[data-command-indicator]");
+    const commandState = store.instrumentCommandState[card.dataset.instrument] || "ready";
+    const commandReady = commandState === "ready";
+    const commandFailed = commandState === "error";
+    commandIndicator.classList.toggle("is-live", commandReady);
+    commandIndicator.classList.toggle("is-error", commandFailed);
+    commandIndicator.setAttribute(
+      "aria-label",
+      commandReady ? "ESP potvrdilo příkaz" :
+        commandState === "pending" ? "Čekám na ACK od ESP" : "ESP příkaz nepotvrdilo"
+    );
+    commandIndicator.title = commandReady ? "ESP potvrdilo příkaz" :
+      commandState === "pending" ? "Čekám na ACK od ESP" : "ESP příkaz nepotvrdilo";
     const timeEl = card.querySelector("[data-instrument-time]");
+    const wifiEl = card.querySelector("[data-instrument-wifi]");
+    const wifi = instrumentWifi[card.dataset.instrument];
+    if (wifi) {
+      const age = wifi.age_sec + Math.max(0, raspberryNow - store.serverTime);
+      const quality = wifi.rssi >= -55 ? "velmi dobrý" :
+        wifi.rssi >= -67 ? "dobrý" : wifi.rssi >= -75 ? "slabý" : "velmi slabý";
+      const stale = age > 60;
+      wifiEl.textContent = stale
+        ? `Wi-Fi: poslední údaj před ${Math.round(age)} s (${wifi.rssi} dBm)`
+        : `Wi-Fi: ${wifi.rssi} dBm (${quality}) · kanál ${wifi.channel ?? "?"} · reconnecty ${wifi.reconnects ?? "?"}`;
+      wifiEl.classList.toggle("weak", wifi.rssi < -75 || stale);
+      wifiEl.title = `RSSI ${wifi.rssi} dBm; údaj starý ${Math.round(age)} s`;
+    } else {
+      wifiEl.textContent = "Wi-Fi: čekám na data";
+      wifiEl.classList.remove("weak");
+      wifiEl.title = "ESP zatím neposlalo Wi-Fi diagnostiku";
+    }
     const rawTime = instrumentTimes[card.dataset.instrument];
     // If ESP reports 0 (epoch), it means NTP is not synced yet.
     if (rawTime === 0 || rawTime === "0") {

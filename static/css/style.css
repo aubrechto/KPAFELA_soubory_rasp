@@ -153,7 +153,8 @@ svg {
   color: var(--text-muted);
 }
 
-.mqtt-status .dot {
+.mqtt-status .dot,
+.command-indicator .dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -164,6 +165,24 @@ svg {
 .mqtt-status.is-live .dot {
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent);
+}
+
+.command-indicator {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+.command-indicator.is-live .dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.command-indicator.is-error .dot {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
 }
 
 .mqtt-status.is-sim .dot {
@@ -398,6 +417,18 @@ svg {
 }
 
 .instrument-time.out-of-sync {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.instrument-wifi {
+  min-height: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.instrument-wifi.weak {
   color: var(--warn);
   font-weight: 600;
 }

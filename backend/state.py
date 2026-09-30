@@ -32,6 +32,8 @@ class StateManager:
         self.instruments: dict[str, str] = {name: OFF for name in INSTRUMENTS}
         self.instrument_times: dict[str, Any] = {}
         self.instrument_time_received: dict[str, float] = {}
+        self.instrument_wifi: dict[str, dict[str, Any]] = {}
+        self.instrument_wifi_received: dict[str, float] = {}
         self.reload_queue()
 
     # ------------------------------------------------------------------ queue
@@ -168,6 +170,21 @@ class StateManager:
             self.instrument_time_received[name] = time.time()
             return True
 
+    def set_instrument_wifi(self, name: str, data: dict[str, Any]) -> bool:
+        with self._lock:
+            if name not in self.instruments:
+                return False
+            rssi = data.get("wifi_rssi")
+            if not isinstance(rssi, (int, float)) or not -127 <= rssi <= 0:
+                return False
+            self.instrument_wifi[name] = {
+                "rssi": int(rssi),
+                "channel": data.get("wifi_channel"),
+                "reconnects": data.get("wifi_reconnects"),
+            }
+            self.instrument_wifi_received[name] = time.time()
+            return True
+
     # -------------------------------------------------------------- simulation
     def tick(self, dt: float) -> bool:
         """Advance playback by ``dt`` seconds. Returns True if state changed."""
@@ -202,6 +219,10 @@ class StateManager:
                 if isinstance(value, (int, float))
             }
             max_skew = max((abs(v) for v in skew.values()), default=0.0)
+            wifi = {
+                name: {**data, "age_sec": round(now - self.instrument_wifi_received[name], 1)}
+                for name, data in self.instrument_wifi.items()
+            }
             return {
                 "type": "state",
                 "server_time": now,
@@ -215,6 +236,7 @@ class StateManager:
                 "library": self.library,
                 "instruments": dict(self.instruments),
                 "instrument_times": effective_times,
+                "instrument_wifi": wifi,
                 "time_sync": {
                     "skew": skew,
                     "max_skew": round(max_skew, 3),

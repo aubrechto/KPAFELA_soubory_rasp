@@ -1,9 +1,9 @@
 // App bootstrap: navigation, now-playing bar, and realtime wiring.
-import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.5";
-import { initPlayer } from "./player.js?v=1.4";
-import { initSettings } from "./settings.js?v=1.4";
-import { initPreferences } from "./preferences.js?v=1.5";
-import { initTerminal } from "./terminal.js";
+import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.6";
+import { initPlayer } from "./player.js?v=1.6";
+import { initSettings } from "./settings.js?v=1.6";
+import { initPreferences } from "./preferences.js?v=1.6";
+import { initTerminal } from "./terminal.js?v=1.6";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
@@ -57,9 +57,9 @@ function initNowbar() {
     if (!btn) return;
     const cmd = btn.dataset.cmd;
     if (cmd === "toggle") {
-      api.player(store.player.status === "playing" ? "pause" : "play");
+      void api.player(store.player.status === "playing" ? "pause" : "play").catch(() => {});
     } else {
-      api.player(cmd);
+      void api.player(cmd).catch(() => {});
     }
   });
 }

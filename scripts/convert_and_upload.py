@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 from queue import Empty, Queue
 
@@ -81,7 +82,7 @@ class UploadClient:
         )
         if args.mqtt_user:
             self.client.username_pw_set(args.mqtt_user, args.mqtt_password or "")
-        self.events: Queue[tuple[str, str, bool]] = Queue()
+        self.events: Queue[tuple[str, str, str, str, int, int, bool]] = Queue()
         self.connected = threading.Event()
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -100,9 +101,14 @@ class UploadClient:
             return
         event = data.get("event")
         song_id = data.get("song_id")
-        if event in ("upload_finished", "upload_error") and song_id:
+        upload_id = data.get("upload_id")
+        if event in ("upload_started", "upload_chunk_ack", "upload_chunk_error",
+                     "upload_finished", "upload_error") and song_id and upload_id:
             instrument = message.topic.split("/")[2]
-            self.events.put((instrument, song_id, event == "upload_finished"))
+            self.events.put((instrument, event, song_id, upload_id,
+                             int(data.get("chunk_index", -1)),
+                             int(data.get("expected_index", -1)),
+                             bool(data.get("success", False))))
 
     def connect(self) -> None:
         self.client.connect(self.args.mqtt_host, self.args.mqtt_port, keepalive=30)
@@ -115,49 +121,100 @@ class UploadClient:
         self.client.loop_stop()
         self.client.disconnect()
 
+    def _wait_upload_event(self, instrument: str, song_id: str, upload_id: str,
+                           expected_event: str, timeout: float,
+                           chunk_index: int | None = None) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                received = self.events.get(
+                    timeout=max(0.1, deadline - time.monotonic())
+                )
+            except Empty:
+                break
+            (received_instrument, event, received_song, received_upload,
+             received_index, expected_index, success) = received
+            if (received_instrument != instrument or received_song != song_id or
+                    received_upload != upload_id):
+                continue
+            if event in ("upload_error", "upload_chunk_error"):
+                raise RuntimeError(
+                    f"ESP {instrument} odmítlo upload {song_id}: {event}, "
+                    f"chunk={received_index}, expected={expected_index}"
+                )
+            if event != expected_event:
+                continue
+            if chunk_index is not None and received_index != chunk_index:
+                continue
+            if not success:
+                raise RuntimeError(
+                    f"ESP {instrument} nepotvrdilo {expected_event} "
+                    f"pro {song_id}, chunk {received_index}"
+                )
+            return
+        raise TimeoutError(
+            f"ESP {instrument} nepotvrdilo {expected_event} pro {song_id}"
+        )
+
+    def _publish_and_wait(self, instrument: str, song_id: str, upload_id: str,
+                          topic: str, payload: bytes | str, expected_event: str,
+                          chunk_index: int | None = None) -> None:
+        for attempt in range(self.args.retries + 1):
+            info = self.client.publish(topic, payload, qos=1)
+            info.wait_for_publish(timeout=self.args.timeout)
+            if not info.is_published():
+                raise TimeoutError(f"MQTT broker nepotvrdil zpravu na {topic}")
+            try:
+                self._wait_upload_event(
+                    instrument, song_id, upload_id, expected_event,
+                    self.args.timeout, chunk_index,
+                )
+                return
+            except TimeoutError:
+                if attempt >= self.args.retries:
+                    raise
+                logger.warning(
+                    "%s %s: chybi %s (pokus %d/%d), opakuji stejnou zpravu",
+                    song_id, instrument, expected_event, attempt + 1,
+                    self.args.retries,
+                )
+        raise TimeoutError(f"ESP {instrument} nepotvrdilo {expected_event}")
+
     def upload(self, instrument: str, song_id: str, path: Path) -> None:
         size = path.stat().st_size
         total_chunks = (size + self.args.chunk_size - 1) // self.args.chunk_size
+        upload_id = uuid.uuid4().hex
         topic = f"kapfela/song/{instrument}/upload"
         start = {
             "command": "upload_start",
             "song_id": song_id,
+            "upload_id": upload_id,
             "size": size,
             "sha256": sha256(path),
             "total_chunks": total_chunks,
             "chunk_size": self.args.chunk_size,
         }
-        self.client.publish(topic, json.dumps(start), qos=1).wait_for_publish()
+        self._publish_and_wait(instrument, song_id, upload_id, topic,
+                               json.dumps(start), "upload_started")
         with path.open("rb") as song_file:
             for index in range(total_chunks):
                 chunk = song_file.read(self.args.chunk_size)
-                self.client.publish(topic, chunk, qos=1).wait_for_publish()
-                # Broker ack neznamena, ze to ESP uz zpracovalo - bez male
-                # pauzy prijde dalsi chunk driv, nez ESP stihne zavolat
-                # mqttClient_.loop(), coz na slabsim Wi-Fi signalu (bass)
-                # nahodne rozbiji prenos uprostred.
+                chunk_topic = f"{topic}/chunk/{upload_id}/{index}"
+                self._publish_and_wait(
+                    instrument, song_id, upload_id, chunk_topic, chunk,
+                    "upload_chunk_ack", index,
+                )
                 if self.args.chunk_delay > 0:
                     time.sleep(self.args.chunk_delay)
                 if (index + 1) % 25 == 0 or index + 1 == total_chunks:
                     logger.info("%s %s: chunk %d/%d", song_id, instrument,
                                 index + 1, total_chunks)
         finish = {"command": "upload_finish", "song_id": song_id,
+                  "upload_id": upload_id,
                   "total_chunks": total_chunks}
-        self.client.publish(topic, json.dumps(finish), qos=1).wait_for_publish()
-        deadline = time.monotonic() + self.args.timeout
-        while time.monotonic() < deadline:
-            try:
-                received_instrument, received_song, success = self.events.get(
-                    timeout=max(0.1, deadline - time.monotonic())
-                )
-            except Empty:
-                break
-            if received_instrument == instrument and received_song == song_id:
-                if not success:
-                    raise RuntimeError(f"ESP {instrument} odmítlo skladbu {song_id}")
-                logger.info("ESP %s confirmed %s", instrument, song_id)
-                return
-        raise TimeoutError(f"ESP {instrument} nepotvrdilo skladbu {song_id}")
+        self._publish_and_wait(instrument, song_id, upload_id, topic,
+                               json.dumps(finish), "upload_finished")
+        logger.info("ESP %s confirmed %s", instrument, song_id)
 
 
 def main() -> int:

@@ -259,6 +259,7 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
         parts = topic.split("/")
         if len(parts) >= 3:
             name = parts[2]
+            state.set_instrument_wifi(name, data)
             if state.set_instrument(name, data.get("status", "")):
                 changed = True
             for key in ("time", "timestamp", "ntp_time"):
@@ -297,6 +298,7 @@ mqtt = MqttManager(
     on_mapping=_handle_mqtt_mapping,
 )
 _loop: asyncio.AbstractEventLoop | None = None
+_command_request_lock = asyncio.Lock()
 
 
 async def _ticker() -> None:
@@ -369,44 +371,78 @@ async def upload_song(song_id: str) -> JSONResponse:
 
 @app.post("/api/player/{command}")
 async def player_command(command: str, body: dict[str, Any] | None = None) -> JSONResponse:
+    async with _command_request_lock:
+        return await _player_command_locked(command, body)
+
+
+async def _player_command_locked(
+    command: str, body: dict[str, Any] | None = None
+) -> JSONResponse:
     body = body or {}
+    ack: dict[str, Any] | None = None
     if command == "play":
         state.play()
-        mqtt.publish_player("play", {"song": state.current})
+        ack = await asyncio.to_thread(
+            mqtt.publish_player_wait, "play", {"song": state.current}
+        )
     elif command == "pause":
         state.pause()
-        mqtt.publish_player("pause")
+        ack = await asyncio.to_thread(mqtt.publish_player_wait, "pause")
     elif command == "stop":
         state.stop()
-        mqtt.publish_player("stop")
+        ack = await asyncio.to_thread(mqtt.publish_player_wait, "stop")
     elif command == "next":
         state.next()
-        mqtt.publish_player("play", {"song": state.current})
+        ack = await asyncio.to_thread(
+            mqtt.publish_player_wait, "play", {"song": state.current}
+        )
     elif command == "prev":
         state.prev()
-        mqtt.publish_player("play", {"song": state.current})
+        ack = await asyncio.to_thread(
+            mqtt.publish_player_wait, "play", {"song": state.current}
+        )
     elif command == "select":
         state.select(int(body.get("index", 0)))
-        mqtt.publish_player("play", {"song": state.current})
+        ack = await asyncio.to_thread(
+            mqtt.publish_player_wait, "play", {"song": state.current}
+        )
     elif command == "seek":
         position = float(body.get("position", 0))
         state.seek(position)
-        mqtt.publish_player("seek", {"position": position})
+        ack = await asyncio.to_thread(
+            mqtt.publish_player_wait, "seek", {"position": position}
+        )
     elif command == "queue":
         if not state.add_to_queue(str(body.get("id", ""))):
             return JSONResponse({"error": "unknown song"}, status_code=404)
     elif command == "play-song":
         if not state.play_song(str(body.get("id", ""))):
             return JSONResponse({"error": "unknown song"}, status_code=404)
-        mqtt.publish_player("play", {"song": state.current})
+        ack = await asyncio.to_thread(
+            mqtt.publish_player_wait, "play", {"song": state.current}
+        )
     else:
         return JSONResponse({"error": "unknown command"}, status_code=400)
-    await manager.broadcast(state.snapshot())
-    return JSONResponse(state.snapshot())
+    snapshot = state.snapshot()
+    await manager.broadcast(snapshot)
+    if ack is not None and not ack["success"]:
+        return JSONResponse(
+            {"error": "ESP command not acknowledged", "ack": ack,
+             "state": snapshot},
+            status_code=504,
+        )
+    if ack is not None:
+        snapshot["command_ack"] = ack
+    return JSONResponse(snapshot)
 
 
 @app.post("/api/instrument/{name}/{command}")
 async def instrument_command(name: str, command: str) -> JSONResponse:
+    async with _command_request_lock:
+        return await _instrument_command_locked(name, command)
+
+
+async def _instrument_command_locked(name: str, command: str) -> JSONResponse:
     if name not in INSTRUMENTS:
         return JSONResponse({"error": "unknown instrument"}, status_code=404)
     mapping = {"play": "playing", "stop": "idle", "off": "off", "on": "idle",
@@ -415,9 +451,17 @@ async def instrument_command(name: str, command: str) -> JSONResponse:
     if status is None:
         return JSONResponse({"error": "unknown command"}, status_code=400)
     state.set_instrument(name, status)
-    mqtt.publish_instrument(name, command)
-    await manager.broadcast(state.snapshot())
-    return JSONResponse(state.snapshot())
+    ack = await asyncio.to_thread(mqtt.publish_instrument_wait, name, command)
+    snapshot = state.snapshot()
+    await manager.broadcast(snapshot)
+    if not ack["success"]:
+        return JSONResponse(
+            {"error": "ESP command not acknowledged", "ack": ack,
+             "state": snapshot},
+            status_code=504,
+        )
+    snapshot["command_ack"] = ack
+    return JSONResponse(snapshot)
 
 
 @app.get("/api/settings")
@@ -501,8 +545,10 @@ async def get_instruments() -> JSONResponse:
 
 @app.post("/api/instruments/test")
 async def test_instruments() -> JSONResponse:
-    mqtt.publish_all_instruments("test")
-    return JSONResponse({"ok": True, "command": "test"})
+    async with _command_request_lock:
+        ack = await asyncio.to_thread(mqtt.publish_all_instruments_wait, "test")
+    return JSONResponse({"ok": ack["success"], "command": "test", "ack": ack},
+                        status_code=200 if ack["success"] else 504)
 
 
 @app.post("/api/terminal/complete")

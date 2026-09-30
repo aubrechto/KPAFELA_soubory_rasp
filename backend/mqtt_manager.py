@@ -14,7 +14,9 @@ import logging
 import os
 import threading
 import time
+import uuid
 from pathlib import Path
+from queue import Empty, Queue
 from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
@@ -28,6 +30,10 @@ TOPIC_ROOT = "kapfela"
 TOPIC_PLAYER = f"{TOPIC_ROOT}/player"
 TOPIC_INSTRUMENT = f"{TOPIC_ROOT}/instrument"
 TOPIC_SONG = f"{TOPIC_ROOT}/song"
+INSTRUMENT_NAMES = ("guitar", "bass", "drums")
+COMMAND_ACK_TIMEOUT = 1.5
+COMMAND_ACK_RETRIES = 2
+DEVICE_STATUS_MAX_AGE = 90.0
 
 StatusHandler = Callable[[str, dict[str, Any]], None]
 
@@ -51,6 +57,11 @@ class MqttManager:
         self.simulation = False
         self._client: mqtt.Client | None = None
         self._lock = threading.Lock()
+        self._command_lock = threading.Lock()
+        self._ack_lock = threading.Lock()
+        self._pending_command_acks: dict[str, dict[str, Any]] = {}
+        self._upload_event_queues: dict[str, Queue[dict[str, Any]]] = {}
+        self._last_device_status: dict[str, float] = {}
 
     def _notify_connection(self) -> None:
         if self.on_connection:
@@ -117,6 +128,71 @@ class MqttManager:
     def publish_all_instruments(self, command: str) -> None:
         self._publish(TOPIC_INSTRUMENT, {"command": command})
 
+    def publish_player_wait(self, command: str,
+                            payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        data = {"command": command, **(payload or {})}
+        return self._publish_command_wait(TOPIC_PLAYER, data,
+                                          self._active_instruments())
+
+    def publish_instrument_wait(self, name: str, command: str) -> dict[str, Any]:
+        return self._publish_command_wait(
+            f"{TOPIC_INSTRUMENT}/{name}", {"command": command}, {name}
+        )
+
+    def publish_all_instruments_wait(self, command: str) -> dict[str, Any]:
+        return self._publish_command_wait(TOPIC_INSTRUMENT, {"command": command},
+                                          self._active_instruments())
+
+    def _active_instruments(self) -> set[str]:
+        now = time.monotonic()
+        with self._ack_lock:
+            active = {
+                name for name, received in self._last_device_status.items()
+                if now - received <= DEVICE_STATUS_MAX_AGE
+            }
+        return active or set(INSTRUMENT_NAMES)
+
+    def _publish_command_wait(self, topic: str, data: dict[str, Any],
+                              expected: set[str]) -> dict[str, Any]:
+        command_id = uuid.uuid4().hex
+        if not self.connected or self._client is None:
+            return {"command_id": command_id, "success": False,
+                    "acknowledged": {}, "missing": sorted(expected),
+                    "reason": "mqtt_disconnected"}
+
+        pending = {
+            "expected": set(expected),
+            "acknowledged": {},
+            "event": threading.Event(),
+        }
+        with self._command_lock:
+            with self._ack_lock:
+                self._pending_command_acks[command_id] = pending
+            message = {**data, "command_id": command_id}
+            try:
+                for attempt in range(COMMAND_ACK_RETRIES + 1):
+                    self._publish(topic, message)
+                    if pending["event"].wait(COMMAND_ACK_TIMEOUT):
+                        break
+                    if attempt < COMMAND_ACK_RETRIES:
+                        logger.warning(
+                            "Command %s not acknowledged by %s; retry %d/%d",
+                            command_id, sorted(expected), attempt + 1,
+                            COMMAND_ACK_RETRIES,
+                        )
+            finally:
+                with self._ack_lock:
+                    self._pending_command_acks.pop(command_id, None)
+
+        acknowledged = dict(pending["acknowledged"])
+        missing = sorted(set(expected) - acknowledged.keys())
+        return {
+            "command_id": command_id,
+            "success": not missing and all(acknowledged.values()),
+            "acknowledged": acknowledged,
+            "missing": missing,
+        }
+
     def publish_config(self, name: str, config_data: dict[str, Any]) -> None:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
@@ -151,8 +227,8 @@ class MqttManager:
             self.simulation = True
             logger.info("SIM  -> song upload skipped: %s", path)
             return False
-        if chunk_size <= 0:
-            raise ValueError("chunk_size must be positive")
+        if chunk_size <= 0 or chunk_size > 1200:
+            raise ValueError("chunk_size must be between 1 and 1200")
 
         song_path = Path(path)
         if not song_path.is_file():
@@ -160,30 +236,86 @@ class MqttManager:
 
         size = song_path.stat().st_size
         total_chunks = (size + chunk_size - 1) // chunk_size
+        upload_id = uuid.uuid4().hex
         topic = f"{TOPIC_SONG}/{instrument}/upload"
-        self._publish(topic, {
+        events: Queue[dict[str, Any]] = Queue()
+        with self._ack_lock:
+            self._upload_event_queues[upload_id] = events
+        try:
+            self._publish_upload_and_wait(topic, {
             "command": "upload_start",
             "song_id": song_id,
+            "upload_id": upload_id,
             "size": size,
             "sha256": _file_sha256(song_path),
             "total_chunks": total_chunks,
             "chunk_size": chunk_size,
-        })
+            }, events, upload_id, "upload_started")
 
-        with song_path.open("rb") as song_file:
-            for index in range(total_chunks):
-                chunk = song_file.read(chunk_size)
-                info = self._client.publish(topic, chunk, qos=1)
-                info.wait_for_publish()
-                logger.info("MQTT -> %s chunk %s/%s", topic, index + 1,
-                            total_chunks)
+            with song_path.open("rb") as song_file:
+                for index in range(total_chunks):
+                    chunk = song_file.read(chunk_size)
+                    chunk_topic = f"{topic}/chunk/{upload_id}/{index}"
+                    self._publish_upload_and_wait(
+                        chunk_topic, chunk, events, upload_id,
+                        "upload_chunk_ack", index,
+                    )
+                    logger.info("MQTT -> %s chunk %s/%s", topic, index + 1,
+                                total_chunks)
 
-        self._publish(topic, {
-            "command": "upload_finish",
-            "song_id": song_id,
-            "total_chunks": total_chunks,
-        })
+            self._publish_upload_and_wait(topic, {
+                "command": "upload_finish",
+                "song_id": song_id,
+                "upload_id": upload_id,
+                "total_chunks": total_chunks,
+            }, events, upload_id, "upload_finished")
+        finally:
+            with self._ack_lock:
+                self._upload_event_queues.pop(upload_id, None)
         return True
+
+    def _publish_upload_and_wait(
+        self, topic: str, payload: dict[str, Any] | bytes,
+        events: Queue[dict[str, Any]], upload_id: str, expected_event: str,
+        chunk_index: int | None = None,
+    ) -> None:
+        message: str | bytes = (
+            json.dumps(payload) if isinstance(payload, dict) else payload
+        )
+        for attempt in range(COMMAND_ACK_RETRIES + 1):
+            if self._client is None or not self.connected:
+                raise RuntimeError("MQTT disconnected during song upload")
+            info = self._client.publish(topic, message, qos=1)
+            try:
+                info.wait_for_publish(timeout=30)
+            except (RuntimeError, ValueError):
+                pass
+
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                try:
+                    event = events.get(timeout=max(0.1, deadline - time.monotonic()))
+                except Empty:
+                    break
+                if event.get("upload_id") != upload_id:
+                    continue
+                name = event.get("event")
+                if name in ("upload_error", "upload_chunk_error"):
+                    raise RuntimeError(
+                        f"ESP {event.get('instrument')} upload failed: {event}"
+                    )
+                if name != expected_event:
+                    continue
+                if (chunk_index is not None and
+                        event.get("chunk_index") != chunk_index):
+                    continue
+                if event.get("success") is True:
+                    return
+                raise RuntimeError(f"ESP upload acknowledgement failed: {event}")
+            if attempt < COMMAND_ACK_RETRIES:
+                logger.warning("Upload event %s missing; retry %d/%d",
+                               expected_event, attempt + 1, COMMAND_ACK_RETRIES)
+        raise TimeoutError(f"ESP did not acknowledge {expected_event} for {upload_id}")
 
     def _publish(self, topic: str, data: dict[str, Any]) -> None:
         message = json.dumps(data)
@@ -241,6 +373,27 @@ class MqttManager:
             data = json.loads(msg.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return
+        parts = msg.topic.split("/")
+        if len(parts) >= 3 and parts[1] == "instrument" and parts[2] in INSTRUMENT_NAMES:
+            with self._ack_lock:
+                self._last_device_status[parts[2]] = time.monotonic()
+            if data.get("event") == "command_ack":
+                command_id = data.get("command_id")
+                if isinstance(command_id, str):
+                    with self._ack_lock:
+                        pending = self._pending_command_acks.get(command_id)
+                        if pending is not None and parts[2] in pending["expected"]:
+                            pending["acknowledged"][parts[2]] = bool(
+                                data.get("success", False)
+                            )
+                            if pending["expected"] <= pending["acknowledged"].keys():
+                                pending["event"].set()
+            upload_id = data.get("upload_id")
+            if isinstance(upload_id, str):
+                with self._ack_lock:
+                    events = self._upload_event_queues.get(upload_id)
+                    if events is not None:
+                        events.put({**data, "instrument": parts[2]})
         if self.on_status:
             self.on_status(msg.topic, data)
 

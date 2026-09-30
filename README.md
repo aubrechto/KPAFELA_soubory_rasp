@@ -152,9 +152,12 @@ python scripts/convert_and_upload.py
 ```
 
 Skript postupně převede skladby, obnoví playlist, připojí se k MQTT a každou
-hotovou skladbu odešle na `guitar`, `bass` a `drums`. Po každém uploadu čeká na
-potvrzení `upload_finished` z ESP; při `upload_error` nebo timeoutu skončí s
-chybou.
+hotovou skladbu odešle na `guitar`, `bass` a `drums`. Před daty čeká na ACK
+otevření souboru, po každém chunku čeká na potvrzení zápisu do LittleFS a po
+uploadu na výsledek kontroly SHA-256. Při timeoutu opakuje stejný chunk s jeho
+ID a pořadovým číslem; ESP duplicitu znovu potvrdí, ale nezapíše podruhé.
+Příkazy z dashboardu se rovněž serializují a čekají na ACK příslušného ESP.
+Pro tento protokol musí být aktualizovaný firmware i Raspberry backend.
 
 Pokud už jsou skladby převedené a chceš pouze opakovat upload:
 
@@ -174,9 +177,9 @@ Parametry pro jinou síť:
 python scripts/convert_and_upload.py --mqtt-host 192.168.50.1 --mqtt-port 1883
 ```
 
-Pokud upload náhodně padá s `ESP <nástroj> nepotvrdilo skladbu ...` (slabší
-Wi-Fi signál nezvládne rychlost chunků), skript to teď sám 2x zopakuje;
-počet pokusů i pauzu mezi chunky lze upravit:
+Pokud se ACK ztratí nebo upload narazí na přechodnou chybu, skript opakuje
+jednotlivý přenos i celý upload; počet pokusů a volitelnou pauzu po potvrzeném
+chunku lze upravit:
 
 ```bash
 python scripts/convert_and_upload.py --chunk-delay 0.02 --retries 3

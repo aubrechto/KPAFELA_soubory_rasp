@@ -1,13 +1,18 @@
 // Shared API + realtime store for the KAP{F}ELA dashboard.
 
 const listeners = new Set();
+const instrumentNames = ["guitar", "bass", "drums"];
+const commandVersions = {};
+let nextCommandVersion = 0;
 
 export const store = {
   player: { status: "stopped", position: 0, index: 0, current: null },
   queue: [],
   library: [],
   instruments: { guitar: "idle", bass: "idle", drums: "idle" },
+  instrumentCommandState: { guitar: "ready", bass: "ready", drums: "ready" },
   instrumentTimes: {},
+  instrumentWifi: {},
   timeSync: { skew: {}, max_skew: 0, in_sync: false },
   serverTime: 0,
   serverTimeReceivedAt: 0,
@@ -24,6 +29,33 @@ function emit() {
   for (const fn of listeners) fn(store);
 }
 
+function trackCommand(names, send) {
+  const version = ++nextCommandVersion;
+  for (const name of names) {
+    commandVersions[name] = version;
+    store.instrumentCommandState[name] = "pending";
+  }
+  emit();
+
+  const settle = (ack) => {
+    const acknowledgements = ack?.acknowledged || {};
+    for (const name of names) {
+      if (commandVersions[name] !== version) continue;
+      store.instrumentCommandState[name] =
+        acknowledgements[name] === true ? "ready" : "error";
+    }
+    emit();
+  };
+
+  return send().then((response) => {
+    settle(response.command_ack || response.ack);
+    return response;
+  }).catch((error) => {
+    settle(error.payload?.ack);
+    throw error;
+  });
+}
+
 // Merge an incoming WebSocket/REST snapshot into the local store.
 export function applySnapshot(snap) {
   if (snap.player) store.player = snap.player;
@@ -31,6 +63,7 @@ export function applySnapshot(snap) {
   if (snap.library) store.library = snap.library;
   if (snap.instruments) store.instruments = snap.instruments;
   if (snap.instrument_times) store.instrumentTimes = snap.instrument_times;
+  if (snap.instrument_wifi) store.instrumentWifi = snap.instrument_wifi;
   if (snap.time_sync) store.timeSync = snap.time_sync;
   if (snap.server_time) {
     store.serverTime = snap.server_time;
@@ -49,8 +82,13 @@ async function request(method, url, body) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(url, opts);
-  if (!res.ok) throw new Error(`${method} ${url} -> ${res.status}`);
-  return res.json();
+  const payload = await res.json();
+  if (!res.ok) {
+    const error = new Error(`${method} ${url} -> ${res.status}`);
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
 }
 
 export const api = {
@@ -59,13 +97,20 @@ export const api = {
   saveSettings: (data) => request("PUT", "/api/settings", data),
   getInstruments: () => request("GET", "/api/instruments"),
   saveInstruments: (data) => request("PUT", "/api/instruments", data),
-  testInstruments: () => request("POST", "/api/instruments/test"),
+  testInstruments: () => trackCommand(
+    instrumentNames, () => request("POST", "/api/instruments/test")
+  ),
   syncTime: (time) => request("POST", "/api/time/sync", { time }),
-  player: (command, body) => request("POST", `/api/player/${command}`, body ?? {}),
+  player: (command, body) => {
+    const send = () => request("POST", `/api/player/${command}`, body ?? {});
+    return command === "queue" ? send() : trackCommand(instrumentNames, send);
+  },
   queueSong: (id) => request("POST", "/api/player/queue", { id }),
-  playSong: (id) => request("POST", "/api/player/play-song", { id }),
+  playSong: (id) => trackCommand(
+    instrumentNames, () => request("POST", "/api/player/play-song", { id })
+  ),
   instrument: (name, command) =>
-    request("POST", `/api/instrument/${name}/${command}`),
+    trackCommand([name], () => request("POST", `/api/instrument/${name}/${command}`)),
 };
 
 // --- WebSocket ------------------------------------------------------------
