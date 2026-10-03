@@ -437,7 +437,11 @@ svg {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
-  padding: 4px 10px;
+  padding: 4px 0;
+  width: 76px;
+  text-align: center;
+  box-sizing: border-box;
+  flex: none;
   border-radius: 999px;
   text-transform: uppercase;
   background: var(--surface-hover);
