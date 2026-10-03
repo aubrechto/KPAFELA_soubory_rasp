@@ -259,6 +259,14 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
         parts = topic.split("/")
         if len(parts) >= 3:
             name = parts[2]
+            if data.get("event") == "command_ack" and _loop is not None:
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast({"command_ack_event": {
+                        "instrument": name,
+                        "success": bool(data.get("success", False)),
+                    }}),
+                    _loop,
+                )
             state.set_instrument_wifi(name, data)
             if state.set_instrument(name, data.get("status", "")):
                 changed = True

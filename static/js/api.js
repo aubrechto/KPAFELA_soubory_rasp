@@ -58,6 +58,15 @@ function trackCommand(names, send) {
 
 // Merge an incoming WebSocket/REST snapshot into the local store.
 export function applySnapshot(snap) {
+  const ackEvent = snap.command_ack_event;
+  if (ackEvent) {
+    if (store.instrumentCommandState[ackEvent.instrument] === "pending") {
+      store.instrumentCommandState[ackEvent.instrument] =
+        ackEvent.success ? "ready" : "error";
+    }
+    emit();
+    return;
+  }
   if (snap.player) store.player = snap.player;
   if (snap.queue) store.queue = snap.queue;
   if (snap.library) store.library = snap.library;
