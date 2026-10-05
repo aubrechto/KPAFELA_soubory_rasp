@@ -4,6 +4,7 @@ const listeners = new Set();
 const instrumentNames = ["guitar", "bass", "drums"];
 const commandVersions = {};
 let nextCommandVersion = 0;
+let songCheckTimer = null;
 
 export const store = {
   player: { status: "stopped", position: 0, index: 0, current: null },
@@ -11,6 +12,7 @@ export const store = {
   library: [],
   instruments: { guitar: "idle", bass: "idle", drums: "idle" },
   instrumentCommandState: { guitar: "ready", bass: "ready", drums: "ready" },
+  songChecks: {},
   instrumentTimes: {},
   instrumentWifi: {},
   timeSync: { skew: {}, max_skew: 0, in_sync: false },
@@ -27,6 +29,26 @@ export function subscribe(fn) {
 
 function emit() {
   for (const fn of listeners) fn(store);
+}
+
+function showSongCheck(ack) {
+  if (!ack) return;
+  const acknowledged = ack.acknowledged || {};
+  store.songChecks = Object.fromEntries(instrumentNames.map((name) => {
+    const result = acknowledged[name] === true ? "found" :
+      acknowledged[name] === false ? "missing" :
+        "unavailable";
+    return [name, result];
+  }));
+  if (songCheckTimer) clearTimeout(songCheckTimer);
+  const shownChecks = store.songChecks;
+  songCheckTimer = setTimeout(() => {
+    if (store.songChecks === shownChecks) {
+      store.songChecks = {};
+      emit();
+    }
+  }, 3000);
+  emit();
 }
 
 function trackCommand(names, send) {
@@ -48,9 +70,11 @@ function trackCommand(names, send) {
   };
 
   return send().then((response) => {
+    showSongCheck(response.song_check);
     settle(response.command_ack || response.ack);
     return response;
   }).catch((error) => {
+    showSongCheck(error.payload?.song_check);
     settle(error.payload?.ack);
     throw error;
   });

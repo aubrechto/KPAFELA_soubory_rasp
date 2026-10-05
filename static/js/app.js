@@ -1,6 +1,6 @@
 // App bootstrap: navigation, now-playing bar, and realtime wiring.
-import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.6";
-import { initPlayer } from "./player.js?v=1.6";
+import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.7";
+import { initPlayer } from "./player.js?v=1.7";
 import { initSettings } from "./settings.js?v=1.6";
 import { initPreferences } from "./preferences.js?v=1.6";
 import { initTerminal } from "./terminal.js?v=1.6";

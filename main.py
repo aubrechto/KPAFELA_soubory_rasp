@@ -377,6 +377,39 @@ async def upload_song(song_id: str) -> JSONResponse:
     return JSONResponse({"song_id": song_id, "uploaded": results})
 
 
+async def _verify_current_song() -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    song = state.current
+    song_id = song.get("id") if song else None
+    if not song_id:
+        return None, JSONResponse({"error": "no song selected"}, status_code=404)
+
+    song_path = SONGS_DIR / f"{song_id}.msg"
+    if not song_path.is_file():
+        return None, JSONResponse(
+            {"error": "converted song not found", "song_id": song_id},
+            status_code=404,
+        )
+    ack = await asyncio.to_thread(
+        mqtt.publish_player_wait, "check_song", {"song": song}
+    )
+    if ack["success"]:
+        return ack, None
+
+    has_negative_ack = any(value is False for value in ack["acknowledged"].values())
+    error = JSONResponse(
+        {"error": "song missing on ESP" if has_negative_ack else "ESP did not respond to song check",
+         "song_id": song_id, "ack": ack, "song_check": ack},
+        status_code=409 if has_negative_ack else 504,
+    )
+    return ack, error
+
+
+async def _stop_after_song_check_error(error: JSONResponse) -> JSONResponse:
+    state.stop()
+    await manager.broadcast(state.snapshot())
+    return error
+
+
 @app.post("/api/player/{command}")
 async def player_command(command: str, body: dict[str, Any] | None = None) -> JSONResponse:
     async with _command_request_lock:
@@ -388,7 +421,13 @@ async def _player_command_locked(
 ) -> JSONResponse:
     body = body or {}
     ack: dict[str, Any] | None = None
+    song_check: dict[str, Any] | None = None
     if command == "play":
+        needs_check = state.status not in ("playing", "paused")
+        if needs_check:
+            song_check, check_error = await _verify_current_song()
+            if check_error is not None:
+                return check_error
         state.play()
         ack = await asyncio.to_thread(
             mqtt.publish_player_wait, "play", {"song": state.current}
@@ -401,16 +440,25 @@ async def _player_command_locked(
         ack = await asyncio.to_thread(mqtt.publish_player_wait, "stop")
     elif command == "next":
         state.next()
+        song_check, check_error = await _verify_current_song()
+        if check_error is not None:
+            return await _stop_after_song_check_error(check_error)
         ack = await asyncio.to_thread(
             mqtt.publish_player_wait, "play", {"song": state.current}
         )
     elif command == "prev":
         state.prev()
+        song_check, check_error = await _verify_current_song()
+        if check_error is not None:
+            return await _stop_after_song_check_error(check_error)
         ack = await asyncio.to_thread(
             mqtt.publish_player_wait, "play", {"song": state.current}
         )
     elif command == "select":
         state.select(int(body.get("index", 0)))
+        song_check, check_error = await _verify_current_song()
+        if check_error is not None:
+            return await _stop_after_song_check_error(check_error)
         ack = await asyncio.to_thread(
             mqtt.publish_player_wait, "play", {"song": state.current}
         )
@@ -426,6 +474,9 @@ async def _player_command_locked(
     elif command == "play-song":
         if not state.play_song(str(body.get("id", ""))):
             return JSONResponse({"error": "unknown song"}, status_code=404)
+        song_check, check_error = await _verify_current_song()
+        if check_error is not None:
+            return await _stop_after_song_check_error(check_error)
         ack = await asyncio.to_thread(
             mqtt.publish_player_wait, "play", {"song": state.current}
         )
@@ -441,6 +492,8 @@ async def _player_command_locked(
         )
     if ack is not None:
         snapshot["command_ack"] = ack
+    if song_check is not None:
+        snapshot["song_check"] = song_check
     return JSONResponse(snapshot)
 
 

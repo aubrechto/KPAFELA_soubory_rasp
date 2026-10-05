@@ -409,6 +409,26 @@ svg {
   text-transform: capitalize;
 }
 
+.song-check-flag {
+  margin: 8px 0;
+  padding: 6px 9px;
+  border-left: 3px solid var(--text-muted);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.song-check-flag[data-result="found"] {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+.song-check-flag[data-result="missing"] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 .instrument-time {
   min-height: 18px;
   color: var(--text-muted);

@@ -1,5 +1,5 @@
 // Player view: Spotify-style hero, transport, instrument cards, and queue.
-import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.6";
+import { api, store, subscribe, fmtTime, fmtClock, coverUrl } from "./api.js?v=1.7";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
@@ -61,6 +61,7 @@ export function initPlayer() {
         <span class="command-indicator is-live" data-command-indicator aria-label="Command ACK potvrzen" title="Command ACK potvrzen"><span class="dot"></span></span>
         <span class="status-pill idle" data-status>IDLE</span>
       </div>
+      <div class="song-check-flag" data-song-check hidden aria-live="polite"></div>
       <div class="instrument-time" data-instrument-time></div>
       <div class="instrument-wifi" data-instrument-wifi>Wi-Fi: čekám na data</div>
       <div class="instrument-actions">
@@ -116,7 +117,7 @@ let queueBuilt = false;
 function render() {
   const view = document.getElementById("view-player");
   if (!view) return;
-  const { player, queue, instruments, instrumentTimes, instrumentWifi } = store;
+  const { player, queue, instruments, instrumentTimes, instrumentWifi, songChecks } = store;
   const cur = player.current;
 
   const raspberryNow = store.serverTime
@@ -145,6 +146,13 @@ function render() {
     pill.textContent = status.toUpperCase();
     pill.className = `status-pill ${status}`;
     const commandIndicator = card.querySelector("[data-command-indicator]");
+    const songCheck = card.querySelector("[data-song-check]");
+    const songCheckState = songChecks[card.dataset.instrument];
+    songCheck.hidden = !songCheckState;
+    songCheck.dataset.result = songCheckState || "";
+    songCheck.textContent = songCheckState === "found" ? "Skladba nalezena" :
+      songCheckState === "missing" ? "Skladba chybí" :
+        songCheckState === "unavailable" ? "ESP neodpovědělo" : "";
     const commandState = store.instrumentCommandState[card.dataset.instrument] || "ready";
     const commandReady = commandState === "ready";
     const commandFailed = commandState === "error";
