@@ -270,6 +270,8 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
             state.set_instrument_wifi(name, data)
             if state.set_instrument(name, data.get("status", "")):
                 changed = True
+            if state.set_instrument_position(name, data.get("position")):
+                changed = True
             for key in ("time", "timestamp", "ntp_time"):
                 if key in data and state.set_instrument_time(name, data[key]):
                     changed = True
@@ -423,11 +425,22 @@ async def _player_command_locked(
     ack: dict[str, Any] | None = None
     song_check: dict[str, Any] | None = None
     if command == "play":
+        resume_position = state.solo_position() if state.status == "paused" else None
         needs_check = state.status not in ("playing", "paused")
         if needs_check:
             song_check, check_error = await _verify_current_song()
             if check_error is not None:
                 return check_error
+        if resume_position is not None:
+            seek_ack = await asyncio.to_thread(
+                mqtt.publish_player_wait, "seek", {"position": resume_position}
+            )
+            if not seek_ack["success"]:
+                return JSONResponse(
+                    {"error": "ESP seek not acknowledged", "ack": seek_ack},
+                    status_code=504,
+                )
+            state.seek(resume_position)
         state.play()
         ack = await asyncio.to_thread(
             mqtt.publish_player_wait, "play", {"song": state.current}
@@ -482,6 +495,13 @@ async def _player_command_locked(
         )
     else:
         return JSONResponse({"error": "unknown command"}, status_code=400)
+    if ack is not None and ack["success"]:
+        if command == "pause":
+            solo_position = state.solo_position()
+            if solo_position is not None:
+                state.seek(solo_position)
+        elif command in ("play", "stop", "next", "prev", "select", "play-song"):
+            state.solo_instrument = None
     snapshot = state.snapshot()
     await manager.broadcast(snapshot)
     if ack is not None and not ack["success"]:
@@ -511,8 +531,17 @@ async def _instrument_command_locked(name: str, command: str) -> JSONResponse:
     status = mapping.get(command)
     if status is None:
         return JSONResponse({"error": "unknown command"}, status_code=400)
-    state.set_instrument(name, status)
-    ack = await asyncio.to_thread(mqtt.publish_instrument_wait, name, command)
+    if command == "play" and state.current is None:
+        return JSONResponse({"error": "no song selected"}, status_code=409)
+    payload = {"song": state.current} if command == "play" else None
+    ack = await asyncio.to_thread(
+        mqtt.publish_instrument_wait, name, command, payload
+    )
+    if ack["success"]:
+        state.set_instrument(name, status)
+        if command == "play" and state.status != "playing":
+            state.solo_instrument = name
+            state.status = "playing"
     snapshot = state.snapshot()
     await manager.broadcast(snapshot)
     if not ack["success"]:

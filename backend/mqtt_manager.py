@@ -134,9 +134,14 @@ class MqttManager:
         return self._publish_command_wait(TOPIC_PLAYER, data,
                                           self._active_instruments())
 
-    def publish_instrument_wait(self, name: str, command: str) -> dict[str, Any]:
+    def publish_instrument_wait(
+        self, name: str, command: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return self._publish_command_wait(
-            f"{TOPIC_INSTRUMENT}/{name}", {"command": command}, {name}
+            f"{TOPIC_INSTRUMENT}/{name}",
+            {"command": command, **(payload or {})},
+            {name},
         )
 
     def publish_all_instruments_wait(self, command: str) -> dict[str, Any]:

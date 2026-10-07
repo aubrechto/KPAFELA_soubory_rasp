@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
+import math
 from typing import Any
 
 from . import config
@@ -30,6 +31,8 @@ class StateManager:
         self.queue: list[dict[str, Any]] = []
         self.index = 0
         self.instruments: dict[str, str] = {name: OFF for name in INSTRUMENTS}
+        self.instrument_positions: dict[str, float] = {}
+        self.solo_instrument: str | None = None
         self.instrument_times: dict[str, Any] = {}
         self.instrument_time_received: dict[str, float] = {}
         self.instrument_wifi: dict[str, dict[str, Any]] = {}
@@ -153,6 +156,21 @@ class StateManager:
                 self.instruments[name] = status
                 return True
             return False
+
+    def set_instrument_position(self, name: str, position: Any) -> bool:
+        if (name not in self.instruments or
+                not isinstance(position, (int, float)) or
+                not math.isfinite(position) or position < 0):
+            return False
+        with self._lock:
+            self.instrument_positions[name] = float(position)
+            return True
+
+    def solo_position(self) -> float | None:
+        with self._lock:
+            if self.solo_instrument is None:
+                return None
+            return self.instrument_positions.get(self.solo_instrument)
 
     def mark_instruments_off(self) -> bool:
         """Force every instrument to OFF (e.g. when the MQTT broker drops)."""
