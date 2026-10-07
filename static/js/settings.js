@@ -1,5 +1,5 @@
 // Settings view: automatic playlist scheduling configuration.
-import { api } from "./api.js?v=1.7";
+import { api } from "./api.js?v=1.8";
 
 export async function initSettings() {
   const view = document.getElementById("view-settings");

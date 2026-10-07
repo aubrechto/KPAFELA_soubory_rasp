@@ -7,7 +7,9 @@ fallback when no broker is reachable).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
+import json
 import logging
 import os
 import pty
@@ -16,13 +18,15 @@ import select
 import shlex
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,6 +40,9 @@ logger = logging.getLogger("kapfela")
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 SONGS_DIR = BASE_DIR / "Data" / "songs"
+SONG_SOURCE_DIR = BASE_DIR / "songs"
+UPLOAD_HISTORY_PATH = BASE_DIR / "Data" / "upload_history.json"
+MAX_SOURCE_SONG_BYTES = 250 * 1024 * 1024
 
 state = StateManager()
 
@@ -309,6 +316,70 @@ mqtt = MqttManager(
 )
 _loop: asyncio.AbstractEventLoop | None = None
 _command_request_lock = asyncio.Lock()
+_song_operation_lock = asyncio.Lock()
+
+
+def _load_upload_history() -> dict[str, str | None]:
+    try:
+        with UPLOAD_HISTORY_PATH.open("r", encoding="utf-8") as history_file:
+            data = json.load(history_file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {name: None for name in INSTRUMENTS}
+    if not isinstance(data, dict):
+        return {name: None for name in INSTRUMENTS}
+    return {name: data.get(name) for name in INSTRUMENTS}
+
+
+def _save_upload_history(history: dict[str, str | None]) -> None:
+    UPLOAD_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = UPLOAD_HISTORY_PATH.with_suffix(".json.tmp")
+    with temporary_path.open("w", encoding="utf-8") as history_file:
+        json.dump(history, history_file, indent=2)
+    temporary_path.replace(UPLOAD_HISTORY_PATH)
+
+
+def _song_tools_status() -> dict[str, Any]:
+    source_files = sorted(SONG_SOURCE_DIR.glob("*.mscz"))
+    converted_files = sorted(SONGS_DIR.glob("*.msg"))
+    converted_ids = {path.stem for path in converted_files}
+    needs_conversion = False
+    for source_path in source_files:
+        song_id = hashlib.md5(source_path.stem.encode()).hexdigest()[:16]
+        metadata_path = SONGS_DIR / f"{song_id}.json"
+        if (song_id not in converted_ids or not metadata_path.is_file() or
+                source_path.stat().st_mtime > metadata_path.stat().st_mtime):
+            needs_conversion = True
+            break
+    return {
+        "source_files": [path.name for path in source_files],
+        "converted_count": len(converted_files),
+        "needs_conversion": needs_conversion,
+        "last_uploads": _load_upload_history(),
+    }
+
+
+def _run_song_conversion() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(BASE_DIR / "tools" / "generate_songs.py"),
+            "-s",
+            str(SONG_SOURCE_DIR / "*.mscz"),
+            "-o",
+            str(SONGS_DIR),
+        ],
+        cwd=BASE_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [sys.executable, str(BASE_DIR / "tools" / "sync_playlist.py")],
+        cwd=BASE_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 async def _ticker() -> None:
@@ -364,6 +435,130 @@ async def get_playlist() -> JSONResponse:
     return JSONResponse(config.load("playlist"))
 
 
+@app.get("/api/song-tools")
+async def get_song_tools() -> JSONResponse:
+    return JSONResponse(_song_tools_status())
+
+
+@app.post("/api/song-sources")
+async def add_song_sources(files: list[UploadFile] = File(...)) -> JSONResponse:
+    accepted: list[tuple[UploadFile, str]] = []
+    for upload_file in files:
+        raw_name = (upload_file.filename or "").replace("\\", "/")
+        filename = raw_name.rsplit("/", 1)[-1]
+        parts = Path(filename).stem.split(" - ", 1)
+        if (Path(filename).suffix.lower() != ".mscz" or len(parts) != 2 or
+                not all(parts)):
+            for item in files:
+                await item.close()
+            return JSONResponse(
+                {"error": "Pouzij .mscz soubor pojmenovany Interpret - Nazev.mscz"},
+                status_code=400,
+            )
+        filename = f"{Path(filename).stem}.mscz"
+        accepted.append((upload_file, filename))
+    if not accepted:
+        return JSONResponse({"error": "Nebyl vybran zadny soubor"}, status_code=400)
+
+    async with _song_operation_lock:
+        SONG_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+        saved: list[str] = []
+        try:
+            for upload_file, filename in accepted:
+                destination = SONG_SOURCE_DIR / filename
+                temporary_path = destination.with_name(f".{destination.name}.uploading")
+                size = 0
+                try:
+                    with temporary_path.open("wb") as target:
+                        while chunk := await upload_file.read(1024 * 1024):
+                            size += len(chunk)
+                            if size > MAX_SOURCE_SONG_BYTES:
+                                raise ValueError(f"{filename} presahuje limit 250 MB")
+                            target.write(chunk)
+                    temporary_path.replace(destination)
+                    saved.append(filename)
+                finally:
+                    temporary_path.unlink(missing_ok=True)
+        except ValueError as error:
+            return JSONResponse({"error": str(error)}, status_code=413)
+        finally:
+            for upload_file, _filename in accepted:
+                await upload_file.close()
+    return JSONResponse({"saved": saved, **_song_tools_status()})
+
+
+@app.post("/api/songs/convert")
+async def convert_songs() -> JSONResponse:
+    async with _song_operation_lock:
+        if not list(SONG_SOURCE_DIR.glob("*.mscz")):
+            return JSONResponse(
+                {"error": "Nejsou nahrane zadne zdrojove .mscz skladby"},
+                status_code=409,
+            )
+        try:
+            await asyncio.to_thread(_run_song_conversion)
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or error.stdout or "Konverze selhala").strip()
+            return JSONResponse({"error": detail[-2000:]}, status_code=500)
+        state.reload_queue()
+        snapshot = state.snapshot()
+        await manager.broadcast(snapshot)
+    return JSONResponse({
+        "converted_count": len(list(SONGS_DIR.glob("*.msg"))),
+        "state": snapshot,
+        **_song_tools_status(),
+    })
+
+
+@app.get("/api/songs/upload-history")
+async def get_song_upload_history() -> JSONResponse:
+    return JSONResponse(_load_upload_history())
+
+
+@app.post("/api/songs/upload")
+async def upload_songs(body: dict[str, Any]) -> JSONResponse:
+    target = body.get("instrument")
+    instruments = list(INSTRUMENTS) if target == "all" else [target]
+    if any(name not in INSTRUMENTS for name in instruments):
+        return JSONResponse({"error": "Vyber platny nastroj nebo all"}, status_code=400)
+    song_files = sorted(SONGS_DIR.glob("*.msg"))
+    if not song_files:
+        return JSONResponse(
+            {"error": "Nejsou pripraveny zadne prevedene skladby"},
+            status_code=409,
+        )
+
+    async with _song_operation_lock:
+        history = _load_upload_history()
+        uploaded: dict[str, int] = {}
+        for instrument in instruments:
+            count = 0
+            try:
+                for song_path in song_files:
+                    success = await asyncio.to_thread(
+                        mqtt.publish_song, instrument, song_path.stem, song_path
+                    )
+                    if not success:
+                        raise RuntimeError("MQTT upload se nepodaril")
+                    count += 1
+            except (RuntimeError, TimeoutError, OSError) as error:
+                return JSONResponse({
+                    "error": str(error),
+                    "instrument": instrument,
+                    "uploaded_count": count,
+                    "completed": uploaded,
+                    "last_uploads": history,
+                }, status_code=502)
+            uploaded[instrument] = count
+            history[instrument] = datetime.now().astimezone().isoformat(timespec="seconds")
+            _save_upload_history(history)
+    return JSONResponse({
+        "uploaded": uploaded,
+        "last_uploads": history,
+        "song_count": len(song_files),
+    })
+
+
 @app.post("/api/songs/{song_id}/upload")
 async def upload_song(song_id: str) -> JSONResponse:
     """Upload an existing converted song file to all three ESP devices."""
@@ -371,11 +566,18 @@ async def upload_song(song_id: str) -> JSONResponse:
     if not song_path.is_file():
         return JSONResponse({"error": "converted song not found"}, status_code=404)
 
-    results = {}
-    for instrument in INSTRUMENTS:
-        results[instrument] = await asyncio.to_thread(
-            mqtt.publish_song, instrument, song_id, song_path
-        )
+    async with _song_operation_lock:
+        results = {}
+        for instrument in INSTRUMENTS:
+            results[instrument] = await asyncio.to_thread(
+                mqtt.publish_song, instrument, song_id, song_path
+            )
+        history = _load_upload_history()
+        uploaded_at = datetime.now().astimezone().isoformat(timespec="seconds")
+        for instrument, success in results.items():
+            if success:
+                history[instrument] = uploaded_at
+        _save_upload_history(history)
     return JSONResponse({"song_id": song_id, "uploaded": results})
 
 

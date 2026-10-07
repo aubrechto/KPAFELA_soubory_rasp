@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/css/style.css?v=1.7" />
+    <link rel="stylesheet" href="/static/css/style.css?v=1.8" />
   </head>
   <body>
     <div class="app">
@@ -41,6 +41,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" /></svg>
             <span>Instruments</span>
           </button>
+          <button class="nav-item" data-view="song-uploads" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14a2 2 0 0 0 2-2v-4h-2v4H5v-4H3v4a2 2 0 0 0 2 2zm6-3h2V8.8l3.6 3.6L18 11l-6-6-6 6 1.4 1.4L11 8.8V17z" /></svg>
+            <span>Upload songs</span>
+          </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -57,12 +61,13 @@
         <section id="view-settings" class="view" aria-label="Settings"></section>
         <section id="view-terminal" class="view" aria-label="Terminal"></section>
         <section id="view-preferences" class="view" aria-label="Instrument Preferences"></section>
+        <section id="view-song-uploads" class="view" aria-label="Upload songs"></section>
       </main>
 
       <!-- Persistent now-playing bar -->
       <footer class="nowbar" id="nowbar" aria-label="Now playing"></footer>
     </div>
 
-    <script type="module" src="/static/js/app.js?v=1.7"></script>
+    <script type="module" src="/static/js/app.js?v=1.8"></script>
   </body>
 </html>

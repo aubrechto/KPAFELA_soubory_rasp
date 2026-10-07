@@ -1,9 +1,10 @@
 // App bootstrap: navigation, now-playing bar, and realtime wiring.
-import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.7";
-import { initPlayer } from "./player.js?v=1.7";
-import { initSettings } from "./settings.js?v=1.6";
-import { initPreferences } from "./preferences.js?v=1.6";
+import { api, store, subscribe, connectSocket, applySnapshot, fmtTime, coverUrl } from "./api.js?v=1.8";
+import { initPlayer } from "./player.js?v=1.8";
+import { initSettings } from "./settings.js?v=1.7";
+import { initPreferences } from "./preferences.js?v=1.7";
 import { initTerminal } from "./terminal.js?v=1.6";
+import { initSongUploads } from "./songUploads.js?v=1.1";
 
 const ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
@@ -110,7 +111,7 @@ async function main() {
   initNowbar();
   initPlayer();
   await initTerminal();
-  await Promise.all([initSettings(), initPreferences()]);
+  await Promise.all([initSettings(), initPreferences(), initSongUploads()]);
 
   subscribe(() => {
     renderNowbar();

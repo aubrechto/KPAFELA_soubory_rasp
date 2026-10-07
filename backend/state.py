@@ -42,12 +42,21 @@ class StateManager:
     # ------------------------------------------------------------------ queue
     def reload_queue(self) -> None:
         with self._lock:
+            current_id = self.current.get("id") if self.current else None
+            previous_position = self.position
             playlist = config.load("playlist")
             self.library = list(playlist.get("songs", []))
             self.queue = list(self.library)
-            if self.index >= len(self.queue):
-                self.index = 0
-            self.position = 0.0
+            self.index = next(
+                (index for index, song in enumerate(self.queue)
+                 if song.get("id") == current_id),
+                0,
+            )
+            self.position = (
+                previous_position
+                if current_id and self.current and self.current.get("id") == current_id
+                else 0.0
+            )
 
     def _find_in_library(self, song_id: str) -> dict[str, Any] | None:
         return next((s for s in self.library if s.get("id") == song_id), None)

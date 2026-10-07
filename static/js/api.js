@@ -111,8 +111,12 @@ export function applySnapshot(snap) {
 async function request(method, url, body) {
   const opts = { method, headers: {} };
   if (body !== undefined) {
-    opts.headers["Content-Type"] = "application/json";
-    opts.body = JSON.stringify(body);
+    if (body instanceof FormData) {
+      opts.body = body;
+    } else {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
   }
   const res = await fetch(url, opts);
   const payload = await res.json();
@@ -129,6 +133,15 @@ export const api = {
   getSettings: () => request("GET", "/api/settings"),
   saveSettings: (data) => request("PUT", "/api/settings", data),
   getInstruments: () => request("GET", "/api/instruments"),
+  getSongTools: () => request("GET", "/api/song-tools"),
+  uploadSongSources: (files) => {
+    const body = new FormData();
+    for (const file of files) body.append("files", file);
+    return request("POST", "/api/song-sources", body);
+  },
+  convertSongs: () => request("POST", "/api/songs/convert", {}),
+  uploadSongs: (instrument) =>
+    request("POST", "/api/songs/upload", { instrument }),
   saveInstruments: (data) => request("PUT", "/api/instruments", data),
   testInstruments: () => trackCommand(
     instrumentNames, () => request("POST", "/api/instruments/test")
