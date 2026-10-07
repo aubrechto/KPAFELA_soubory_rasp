@@ -1,4 +1,4 @@
-import { api, applySnapshot } from "./api.js?v=1.8";
+import { api, applySnapshot } from "./api.js?v=1.9";
 
 const TARGETS = ["guitar", "bass", "drums", "all"];
 const TARGET_LABELS = {
@@ -39,6 +39,14 @@ export async function initSongUploads() {
         <button class="dialog-close" id="upload-dialog-close" type="button" aria-label="Close">&times;</button>
       </div>
       <div class="upload-target-list" id="upload-target-list"></div>
+      <div class="upload-progress" id="upload-progress" hidden>
+        <div class="upload-progress-summary">
+          <strong id="upload-progress-count">0 / 0 song uploads</strong>
+          <span id="upload-progress-percent">0%</span>
+        </div>
+        <progress id="upload-progress-bar" max="100" value="0" aria-label="Song upload progress"></progress>
+        <p id="upload-progress-instrument"></p>
+      </div>
       <p class="upload-dialog-status" id="upload-dialog-status" aria-live="polite"></p>
     </dialog>
   `;
@@ -51,8 +59,31 @@ export async function initSongUploads() {
   const dialog = view.querySelector("#upload-dialog");
   const status = view.querySelector("#song-work-status");
   const dialogStatus = view.querySelector("#upload-dialog-status");
+  const progressPanel = view.querySelector("#upload-progress");
+  const progressCount = view.querySelector("#upload-progress-count");
+  const progressPercent = view.querySelector("#upload-progress-percent");
+  const progressBar = view.querySelector("#upload-progress-bar");
+  const progressInstrument = view.querySelector("#upload-progress-instrument");
   let tools = { source_files: [], converted_count: 0, needs_conversion: false, last_uploads: {} };
   let busy = false;
+  let progressTimer = null;
+
+  function renderUploadProgress(progress) {
+    const total = Number(progress.overall_total) || 0;
+    const uploaded = Number(progress.overall_count) || 0;
+    const percent = total ? Math.min(100, Math.floor(uploaded / total * 100)) : 0;
+    progressPanel.hidden = false;
+    progressCount.textContent = `${uploaded} / ${total} song uploads`;
+    progressPercent.textContent = `${percent}%`;
+    progressBar.value = percent;
+    progressBar.setAttribute("aria-valuetext", `${uploaded} of ${total} song uploads`);
+    const instrument = TARGET_LABELS[progress.instrument] || "";
+    const instrumentCount = Number(progress.uploaded_count) || 0;
+    const instrumentTotal = Number(progress.total_count) || 0;
+    progressInstrument.textContent = instrument
+      ? `${instrument}: ${instrumentCount} / ${instrumentTotal} songs`
+      : "";
+  }
 
   function showStatus(message, kind = "") {
     status.textContent = message;
@@ -194,9 +225,34 @@ export async function initSongUploads() {
     busy = true;
     status.dataset.operation = "upload";
     dialogStatus.textContent = `Uploading ${tools.converted_count} songs to ${TARGET_LABELS[target]}...`;
+    progressPanel.hidden = false;
+    progressCount.textContent = `0 / ${tools.converted_count * (target === "all" ? 3 : 1)} song uploads`;
+    progressPercent.textContent = "0%";
+    progressBar.value = 0;
+    progressInstrument.textContent = "Preparing upload...";
     render();
+    progressTimer = window.setInterval(async () => {
+      try {
+        const progress = await api.getSongUploadProgress();
+        if (progress.target === target && progress.state !== "idle") {
+          renderUploadProgress(progress);
+        }
+      } catch {
+        // The upload request still reports failures if progress polling is unavailable.
+      }
+    }, 500);
     try {
       const result = await api.uploadSongs(target);
+      window.clearInterval(progressTimer);
+      progressTimer = null;
+      const totalUploads = result.song_count * (target === "all" ? 3 : 1);
+      renderUploadProgress({
+        overall_count: totalUploads,
+        overall_total: totalUploads,
+        uploaded_count: result.song_count,
+        total_count: result.song_count,
+        instrument: target === "all" ? "drums" : target,
+      });
       tools.last_uploads = result.last_uploads;
       const completed = Object.entries(result.uploaded)
         .map(([instrument, count]) => `${count} to ${TARGET_LABELS[instrument]}`)
@@ -204,11 +260,15 @@ export async function initSongUploads() {
       dialog.close();
       showStatus(`Upload complete: ${completed}.`, "is-success");
     } catch (error) {
+      window.clearInterval(progressTimer);
+      progressTimer = null;
       const detail = error.payload?.error || error.message;
       dialogStatus.textContent = `Upload failed: ${detail}`;
       showStatus(`Upload failed: ${detail}`, "is-error");
       if (error.payload?.last_uploads) tools.last_uploads = error.payload.last_uploads;
     } finally {
+      if (progressTimer) window.clearInterval(progressTimer);
+      progressTimer = null;
       busy = false;
       status.dataset.operation = "";
       render();

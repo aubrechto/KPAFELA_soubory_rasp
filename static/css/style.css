@@ -943,6 +943,60 @@ input:focus {
   overflow-wrap: anywhere;
 }
 
+.upload-progress {
+  margin-top: 18px;
+}
+
+.upload-progress[hidden] {
+  display: none;
+}
+
+.upload-progress-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress-summary span,
+.upload-progress-instrument {
+  color: var(--text-muted);
+}
+
+.upload-progress progress {
+  display: block;
+  width: 100%;
+  height: 9px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  background: #333;
+  accent-color: #70c9d4;
+}
+
+.upload-progress progress::-webkit-progress-bar {
+  border-radius: 5px;
+  background: #333;
+}
+
+.upload-progress progress::-webkit-progress-value {
+  border-radius: 5px;
+  background: #70c9d4;
+  transition: width 0.2s ease;
+}
+
+.upload-progress progress::-moz-progress-bar {
+  border-radius: 5px;
+  background: #70c9d4;
+}
+
+.upload-progress-instrument {
+  margin-top: 7px;
+  font-size: 12px;
+}
+
 .upload-dialog-status {
   margin-top: 14px;
   color: var(--text-muted);

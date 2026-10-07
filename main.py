@@ -317,6 +317,17 @@ mqtt = MqttManager(
 _loop: asyncio.AbstractEventLoop | None = None
 _command_request_lock = asyncio.Lock()
 _song_operation_lock = asyncio.Lock()
+_song_upload_progress: dict[str, Any] = {
+    "state": "idle",
+    "active": False,
+    "target": None,
+    "instrument": None,
+    "uploaded_count": 0,
+    "total_count": 0,
+    "overall_count": 0,
+    "overall_total": 0,
+    "completed": {},
+}
 
 
 def _load_upload_history() -> dict[str, str | None]:
@@ -515,6 +526,14 @@ async def get_song_upload_history() -> JSONResponse:
     return JSONResponse(_load_upload_history())
 
 
+@app.get("/api/songs/upload-progress")
+async def get_song_upload_progress() -> JSONResponse:
+    return JSONResponse({
+        **_song_upload_progress,
+        "completed": dict(_song_upload_progress["completed"]),
+    })
+
+
 @app.post("/api/songs/upload")
 async def upload_songs(body: dict[str, Any]) -> JSONResponse:
     target = body.get("instrument")
@@ -531,8 +550,24 @@ async def upload_songs(body: dict[str, Any]) -> JSONResponse:
     async with _song_operation_lock:
         history = _load_upload_history()
         uploaded: dict[str, int] = {}
+        _song_upload_progress.update({
+            "state": "uploading",
+            "active": True,
+            "target": target,
+            "instrument": instruments[0],
+            "uploaded_count": 0,
+            "total_count": len(song_files),
+            "overall_count": 0,
+            "overall_total": len(song_files) * len(instruments),
+            "completed": {},
+        })
         for instrument in instruments:
             count = 0
+            _song_upload_progress.update({
+                "instrument": instrument,
+                "uploaded_count": 0,
+                "completed": dict(uploaded),
+            })
             try:
                 for song_path in song_files:
                     success = await asyncio.to_thread(
@@ -541,7 +576,18 @@ async def upload_songs(body: dict[str, Any]) -> JSONResponse:
                     if not success:
                         raise RuntimeError("MQTT upload se nepodaril")
                     count += 1
+                    _song_upload_progress.update({
+                        "uploaded_count": count,
+                        "overall_count": sum(uploaded.values()) + count,
+                        "completed": dict(uploaded),
+                    })
             except (RuntimeError, TimeoutError, OSError) as error:
+                _song_upload_progress.update({
+                    "state": "failed",
+                    "active": False,
+                    "uploaded_count": count,
+                    "completed": dict(uploaded),
+                })
                 return JSONResponse({
                     "error": str(error),
                     "instrument": instrument,
@@ -552,6 +598,8 @@ async def upload_songs(body: dict[str, Any]) -> JSONResponse:
             uploaded[instrument] = count
             history[instrument] = datetime.now().astimezone().isoformat(timespec="seconds")
             _save_upload_history(history)
+            _song_upload_progress["completed"] = dict(uploaded)
+        _song_upload_progress.update({"state": "complete", "active": False})
     return JSONResponse({
         "uploaded": uploaded,
         "last_uploads": history,
