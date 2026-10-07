@@ -1,7 +1,6 @@
 import os
 import json
 import msgpack
-import shutil
 import hashlib
 import pandas
 import numpy as np
@@ -327,21 +326,38 @@ if __name__ == '__main__':
     if args.debug:
         print("Debug mode ON")
     
-    # remove dir
-    if os.path.exists(f"{instrument_dir}"):
-        shutil.rmtree(instrument_dir)
+    os.makedirs(instrument_dir, exist_ok=True)
+    source_files = glob.glob(songs)
+    source_ids = {
+        get_hash_fn(filename, ext="")
+        for filename in source_files
+        if filename.endswith(".mscz")
+    }
+    for extension in (".json", ".msg"):
+        for output_path in glob.glob(os.path.join(instrument_dir, f"*{extension}")):
+            if os.path.splitext(os.path.basename(output_path))[0] not in source_ids:
+                os.remove(output_path)
 
     # Store all three instrument tracks in one file. The ESP selects one track
     # at runtime using KAPFELA_INSTRUMENT_ID.
-    os.makedirs(instrument_dir, exist_ok=True)
-
-    for filename in glob.glob(songs):
+    for filename in source_files:
         print("Generating: {}".format(filename))
         if filename.endswith(".mscz"):
+            filename_base = os.path.splitext(filename)[0]
+            metadata_path = os.path.join(instrument_dir, get_hash_fn(filename_base))
+            messagepack_path = os.path.join(
+                instrument_dir, get_hash_fn(filename_base, ext=".msg")
+            )
+            source_mtime = os.path.getmtime(filename)
+            if (os.path.isfile(metadata_path) and os.path.isfile(messagepack_path)
+                    and os.path.getmtime(metadata_path) >= source_mtime
+                    and os.path.getmtime(messagepack_path) >= source_mtime):
+                print(f"Skipped: {filename}", flush=True)
+                continue
+
             info = get_info(f'{filename}')
 
             # save info to json
-            filename_base = os.path.splitext(filename)[0]
             print(f"{filename_base}")
             with open(f"{instrument_dir}/{get_hash_fn(filename_base)}", 'w') as f:
                 f.write(json.dumps(info, sort_keys=True, ensure_ascii=False))
@@ -363,3 +379,5 @@ if __name__ == '__main__':
 
             with open(f"{instrument_dir}/{get_hash_fn(filename_base)}", 'w') as f:
                 f.write(json.dumps(info, sort_keys=True, ensure_ascii=False))
+
+            print(f"Converted: {filename}", flush=True)

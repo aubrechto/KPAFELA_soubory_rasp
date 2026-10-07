@@ -1,4 +1,4 @@
-import { api, applySnapshot } from "./api.js?v=1.9";
+import { api, applySnapshot } from "./api.js?v=1.10";
 
 const TARGETS = ["guitar", "bass", "drums", "all"];
 const TARGET_LABELS = {
@@ -32,6 +32,14 @@ export async function initSongUploads() {
       <button class="btn-save song-upload-button" id="song-upload" type="button" disabled>Upload</button>
       <span class="song-work-status" id="song-work-status" aria-live="polite"></span>
     </div>
+    <div class="upload-progress song-conversion-progress" id="conversion-progress" hidden>
+      <div class="upload-progress-summary">
+        <strong id="conversion-progress-count">0 / 0 songs processed</strong>
+        <span id="conversion-progress-percent">0%</span>
+      </div>
+      <progress id="conversion-progress-bar" max="100" value="0" aria-label="Song conversion progress"></progress>
+      <p class="upload-progress-instrument" id="conversion-progress-song"></p>
+    </div>
 
     <dialog class="upload-dialog" id="upload-dialog">
       <div class="upload-dialog-head">
@@ -41,7 +49,7 @@ export async function initSongUploads() {
       <div class="upload-target-list" id="upload-target-list"></div>
       <div class="upload-progress" id="upload-progress" hidden>
         <div class="upload-progress-summary">
-          <strong id="upload-progress-count">0 / 0 song uploads</strong>
+          <strong id="upload-progress-count">0 / 0 songs checked</strong>
           <span id="upload-progress-percent">0%</span>
         </div>
         <progress id="upload-progress-bar" max="100" value="0" aria-label="Song upload progress"></progress>
@@ -64,25 +72,48 @@ export async function initSongUploads() {
   const progressPercent = view.querySelector("#upload-progress-percent");
   const progressBar = view.querySelector("#upload-progress-bar");
   const progressInstrument = view.querySelector("#upload-progress-instrument");
+  const conversionProgress = view.querySelector("#conversion-progress");
+  const conversionProgressCount = view.querySelector("#conversion-progress-count");
+  const conversionProgressPercent = view.querySelector("#conversion-progress-percent");
+  const conversionProgressBar = view.querySelector("#conversion-progress-bar");
+  const conversionProgressSong = view.querySelector("#conversion-progress-song");
   let tools = { source_files: [], converted_count: 0, needs_conversion: false, last_uploads: {} };
   let busy = false;
   let progressTimer = null;
 
   function renderUploadProgress(progress) {
     const total = Number(progress.overall_total) || 0;
-    const uploaded = Number(progress.overall_count) || 0;
-    const percent = total ? Math.min(100, Math.floor(uploaded / total * 100)) : 0;
+    const processed = Number(progress.overall_count) || 0;
+    const percent = total ? Math.min(100, Math.floor(processed / total * 100)) : 0;
     progressPanel.hidden = false;
-    progressCount.textContent = `${uploaded} / ${total} song uploads`;
+    progressCount.textContent = `${processed} / ${total} songs checked`;
     progressPercent.textContent = `${percent}%`;
     progressBar.value = percent;
-    progressBar.setAttribute("aria-valuetext", `${uploaded} of ${total} song uploads`);
+    progressBar.setAttribute("aria-valuetext", `${processed} of ${total} songs checked`);
     const instrument = TARGET_LABELS[progress.instrument] || "";
-    const instrumentCount = Number(progress.uploaded_count) || 0;
+    const instrumentProcessed = Number(progress.processed_count) || 0;
+    const instrumentUploaded = Number(progress.uploaded_count) || 0;
+    const instrumentSkipped = Number(progress.skipped_count) || 0;
     const instrumentTotal = Number(progress.total_count) || 0;
     progressInstrument.textContent = instrument
-      ? `${instrument}: ${instrumentCount} / ${instrumentTotal} songs`
+      ? `${instrument}: ${instrumentProcessed} / ${instrumentTotal} checked (${instrumentUploaded} uploaded, ${instrumentSkipped} already present)`
       : "";
+  }
+
+  function renderConversionProgress(progress) {
+    const total = Number(progress.total_count) || 0;
+    const completed = Number(progress.completed_count) || 0;
+    const percent = total ? Math.min(100, Math.floor(completed / total * 100)) : 0;
+    conversionProgress.hidden = false;
+    conversionProgressCount.textContent = `${completed} / ${total} songs processed`;
+    conversionProgressPercent.textContent = `${percent}%`;
+    conversionProgressBar.value = percent;
+    conversionProgressBar.setAttribute("aria-valuetext", `${completed} of ${total} songs processed`);
+    const converted = Number(progress.converted_count) || 0;
+    const skipped = Number(progress.skipped_count) || 0;
+    conversionProgressSong.textContent = progress.current_song
+      ? `Converting: ${progress.current_song}`
+      : `${converted} converted, ${skipped} unchanged`;
   }
 
   function showStatus(message, kind = "") {
@@ -198,15 +229,46 @@ export async function initSongUploads() {
     busy = true;
     status.dataset.operation = "convert";
     showStatus("Converting all source files and rebuilding the playlist...");
+    conversionProgress.hidden = false;
+    renderConversionProgress({
+      total_count: tools.source_files.length,
+      completed_count: 0,
+      converted_count: 0,
+      skipped_count: 0,
+    });
+    conversionProgressSong.textContent = "Preparing conversion...";
     render();
+    progressTimer = window.setInterval(async () => {
+      try {
+        const progress = await api.getSongConversionProgress();
+        if (progress.state !== "idle") renderConversionProgress(progress);
+      } catch {
+        // The conversion request still reports failures if progress polling is unavailable.
+      }
+    }, 500);
     try {
       const result = await api.convertSongs();
+      window.clearInterval(progressTimer);
+      progressTimer = null;
+      renderConversionProgress({
+        total_count: result.source_files.length,
+        completed_count: result.source_files.length,
+        converted_count: result.converted_this_run,
+        skipped_count: result.skipped_count,
+      });
       tools = result;
       if (result.state) applySnapshot(result.state);
-      showStatus(`Converted ${result.converted_count} songs; playlist refreshed.`, "is-success");
+      showStatus(
+        `Converted ${result.converted_this_run} new songs, skipped ${result.skipped_count} unchanged; playlist refreshed.`,
+        "is-success",
+      );
     } catch (error) {
+      window.clearInterval(progressTimer);
+      progressTimer = null;
       showStatus(error.payload?.error || error.message, "is-error");
     } finally {
+      if (progressTimer) window.clearInterval(progressTimer);
+      progressTimer = null;
       busy = false;
       status.dataset.operation = "";
       render();
@@ -226,7 +288,7 @@ export async function initSongUploads() {
     status.dataset.operation = "upload";
     dialogStatus.textContent = `Uploading ${tools.converted_count} songs to ${TARGET_LABELS[target]}...`;
     progressPanel.hidden = false;
-    progressCount.textContent = `0 / ${tools.converted_count * (target === "all" ? 3 : 1)} song uploads`;
+    progressCount.textContent = `0 / ${tools.converted_count * (target === "all" ? 3 : 1)} songs checked`;
     progressPercent.textContent = "0%";
     progressBar.value = 0;
     progressInstrument.textContent = "Preparing upload...";
@@ -249,16 +311,20 @@ export async function initSongUploads() {
       renderUploadProgress({
         overall_count: totalUploads,
         overall_total: totalUploads,
-        uploaded_count: result.song_count,
+        processed_count: result.song_count,
+        uploaded_count: result.uploaded[target === "all" ? "drums" : target] || 0,
+        skipped_count: result.skipped[target === "all" ? "drums" : target] || 0,
         total_count: result.song_count,
         instrument: target === "all" ? "drums" : target,
       });
       tools.last_uploads = result.last_uploads;
       const completed = Object.entries(result.uploaded)
-        .map(([instrument, count]) => `${count} to ${TARGET_LABELS[instrument]}`)
+        .map(([instrument, count]) =>
+          `${TARGET_LABELS[instrument]}: ${count} uploaded, ${result.skipped[instrument] || 0} already present`
+        )
         .join(", ");
       dialog.close();
-      showStatus(`Upload complete: ${completed}.`, "is-success");
+      showStatus(`Song sync complete: ${completed}.`, "is-success");
     } catch (error) {
       window.clearInterval(progressTimer);
       progressTimer = null;

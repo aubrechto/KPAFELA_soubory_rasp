@@ -140,8 +140,10 @@ python tools/generate_songs.py -o Data/songs
 python tools/sync_playlist.py
 ```
 
-Výstupy jsou v `Data/songs` a playlist v `Data/playlist.json`. Do playlistu se
-zařadí pouze skladby, které mají současně metadata `.json` i hotový `.msg` soubor.
+Výstupy jsou v `Data/songs` a playlist v `Data/playlist.json`. Při opakovaném
+převodu se hotové soubory znovu negenerují, pokud zdrojový `.mscz` není novější.
+Výstupy skladeb, jejichž zdroj už ve složce `songs` není, se odstraní. Do playlistu
+se zařadí pouze skladby, které mají současně metadata `.json` i hotový `.msg` soubor.
 
 ## Kompletní převod a upload na ESP
 
@@ -151,8 +153,9 @@ Po připojení Raspberry k MQTT síti spusť jeden příkaz:
 python scripts/convert_and_upload.py
 ```
 
-Skript postupně převede skladby, obnoví playlist, připojí se k MQTT a každou
-hotovou skladbu odešle na `guitar`, `bass` a `drums`. Před daty čeká na ACK
+Skript převede nové nebo změněné skladby, obnoví playlist a připojí se k MQTT.
+Před každým uploadem se cílového ESP zeptá, zda už skladbu má; existující skladby
+přeskočí a pošle pouze chybějící. Při uploadu čeká na ACK
 otevření souboru, po každém chunku čeká na potvrzení zápisu do LittleFS a po
 uploadu na výsledek kontroly SHA-256. Při timeoutu opakuje stejný chunk s jeho
 ID a pořadovým číslem; ESP duplicitu znovu potvrdí, ale nezapíše podruhé.

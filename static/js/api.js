@@ -134,6 +134,7 @@ export const api = {
   saveSettings: (data) => request("PUT", "/api/settings", data),
   getInstruments: () => request("GET", "/api/instruments"),
   getSongTools: () => request("GET", "/api/song-tools"),
+  getSongConversionProgress: () => request("GET", "/api/songs/conversion-progress"),
   getSongUploadProgress: () => request("GET", "/api/songs/upload-progress"),
   uploadSongSources: (files) => {
     const body = new FormData();

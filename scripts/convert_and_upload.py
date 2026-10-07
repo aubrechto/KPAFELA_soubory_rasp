@@ -1,4 +1,4 @@
-"""Convert all songs and upload every finished bundle to all ESP devices."""
+"""Convert changed songs and upload missing bundles to ESP devices."""
 from __future__ import annotations
 
 import argparse
@@ -83,6 +83,7 @@ class UploadClient:
         if args.mqtt_user:
             self.client.username_pw_set(args.mqtt_user, args.mqtt_password or "")
         self.events: Queue[tuple[str, str, str, str, int, int, bool]] = Queue()
+        self.command_events: Queue[tuple[str, str, str, bool]] = Queue()
         self.connected = threading.Event()
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -100,6 +101,18 @@ class UploadClient:
         except (UnicodeDecodeError, json.JSONDecodeError):
             return
         event = data.get("event")
+        if event == "command_ack":
+            command_id = data.get("command_id")
+            command = data.get("command")
+            if command_id and command:
+                instrument = message.topic.split("/")[2]
+                self.command_events.put((
+                    instrument,
+                    command_id,
+                    command,
+                    bool(data.get("success", False)),
+                ))
+            return
         song_id = data.get("song_id")
         upload_id = data.get("upload_id")
         if event in ("upload_started", "upload_chunk_ack", "upload_chunk_error",
@@ -120,6 +133,41 @@ class UploadClient:
     def close(self) -> None:
         self.client.loop_stop()
         self.client.disconnect()
+
+    def song_exists(self, instrument: str, song_id: str) -> bool:
+        command_id = uuid.uuid4().hex
+        topic = f"kapfela/instrument/{instrument}"
+        payload = json.dumps({
+            "command": "check_song",
+            "command_id": command_id,
+            "fn": song_id,
+        })
+        for attempt in range(self.args.retries + 1):
+            info = self.client.publish(topic, payload, qos=1)
+            info.wait_for_publish(timeout=self.args.timeout)
+            if not info.is_published():
+                raise TimeoutError(f"MQTT broker nepotvrdil kontrolu {song_id}")
+            deadline = time.monotonic() + self.args.timeout
+            while time.monotonic() < deadline:
+                try:
+                    received = self.command_events.get(
+                        timeout=max(0.1, deadline - time.monotonic())
+                    )
+                except Empty:
+                    break
+                received_instrument, received_id, command, exists = received
+                if (received_instrument, received_id, command) == (
+                    instrument, command_id, "check_song"
+                ):
+                    return exists
+            if attempt < self.args.retries:
+                logger.warning(
+                    "ESP %s neodpovedelo na kontrolu %s, opakuji (%d/%d)",
+                    instrument, song_id, attempt + 1, self.args.retries,
+                )
+        raise TimeoutError(
+            f"ESP {instrument} neodpovedelo na kontrolu skladby {song_id}"
+        )
 
     def _wait_upload_event(self, instrument: str, song_id: str, upload_id: str,
                            expected_event: str, timeout: float,
@@ -229,13 +277,20 @@ def main() -> int:
     uploader = UploadClient(args)
     try:
         uploader.connect()
+        uploaded = 0
+        skipped = 0
         for path in files:
             song_id = path.stem
             for instrument in args.instruments:
+                if uploader.song_exists(instrument, song_id):
+                    logger.info("ESP %s already has %s; skipping", instrument, song_id)
+                    skipped += 1
+                    continue
                 attempt = 0
                 while True:
                     try:
                         uploader.upload(instrument, song_id, path)
+                        uploaded += 1
                         break
                     except (TimeoutError, RuntimeError):
                         if attempt >= args.retries:
@@ -245,8 +300,10 @@ def main() -> int:
                             "%s %s: upload selhal, zkousim znovu (%d/%d)",
                             song_id, instrument, attempt, args.retries,
                         )
-        logger.info("Hotovo: %d skladeb odeslano na %d ESP", len(files),
-                    len(args.instruments))
+        logger.info(
+            "Hotovo: %d uploadu, %d skladeb jiz na ESP preskoceno",
+            uploaded, skipped,
+        )
     finally:
         uploader.close()
     return 0

@@ -317,16 +317,28 @@ mqtt = MqttManager(
 _loop: asyncio.AbstractEventLoop | None = None
 _command_request_lock = asyncio.Lock()
 _song_operation_lock = asyncio.Lock()
+_song_conversion_progress: dict[str, Any] = {
+    "state": "idle",
+    "active": False,
+    "completed_count": 0,
+    "total_count": 0,
+    "converted_count": 0,
+    "skipped_count": 0,
+    "current_song": "",
+}
 _song_upload_progress: dict[str, Any] = {
     "state": "idle",
     "active": False,
     "target": None,
     "instrument": None,
+    "processed_count": 0,
     "uploaded_count": 0,
+    "skipped_count": 0,
     "total_count": 0,
     "overall_count": 0,
     "overall_total": 0,
     "completed": {},
+    "skipped": {},
 }
 
 
@@ -357,8 +369,10 @@ def _song_tools_status() -> dict[str, Any]:
     for source_path in source_files:
         song_id = hashlib.md5(source_path.stem.encode()).hexdigest()[:16]
         metadata_path = SONGS_DIR / f"{song_id}.json"
+        messagepack_path = SONGS_DIR / f"{song_id}.msg"
         if (song_id not in converted_ids or not metadata_path.is_file() or
-                source_path.stat().st_mtime > metadata_path.stat().st_mtime):
+            source_path.stat().st_mtime > metadata_path.stat().st_mtime or
+            source_path.stat().st_mtime > messagepack_path.stat().st_mtime):
             needs_conversion = True
             break
     return {
@@ -370,20 +384,61 @@ def _song_tools_status() -> dict[str, Any]:
 
 
 def _run_song_conversion() -> None:
-    subprocess.run(
-        [
-            sys.executable,
-            str(BASE_DIR / "tools" / "generate_songs.py"),
-            "-s",
-            str(SONG_SOURCE_DIR / "*.mscz"),
-            "-o",
-            str(SONGS_DIR),
-        ],
+    source_files = sorted(SONG_SOURCE_DIR.glob("*.mscz"))
+    _song_conversion_progress.update({
+        "state": "converting",
+        "active": True,
+        "completed_count": 0,
+        "total_count": len(source_files),
+        "converted_count": 0,
+        "skipped_count": 0,
+        "current_song": "",
+    })
+    command = [
+        sys.executable,
+        "-u",
+        str(BASE_DIR / "tools" / "generate_songs.py"),
+        "-s",
+        str(SONG_SOURCE_DIR / "*.mscz"),
+        "-o",
+        str(SONGS_DIR),
+    ]
+    process = subprocess.Popen(
+        command,
         cwd=BASE_DIR,
-        check=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
     )
+    output_tail: list[str] = []
+    for line in process.stdout or []:
+        output_tail.append(line)
+        if len(output_tail) > 100:
+            output_tail.pop(0)
+        if line.startswith("Generating: "):
+            _song_conversion_progress["current_song"] = Path(
+                line.removeprefix("Generating: ").strip()
+            ).name
+        elif line.startswith("Converted: "):
+            _song_conversion_progress.update({
+                "completed_count": _song_conversion_progress["completed_count"] + 1,
+                "converted_count": _song_conversion_progress["converted_count"] + 1,
+                "current_song": "",
+            })
+        elif line.startswith("Skipped: "):
+            _song_conversion_progress.update({
+                "completed_count": _song_conversion_progress["completed_count"] + 1,
+                "skipped_count": _song_conversion_progress["skipped_count"] + 1,
+                "current_song": "",
+            })
+    return_code = process.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(
+            return_code, command, output="".join(output_tail)
+        )
     subprocess.run(
         [sys.executable, str(BASE_DIR / "tools" / "sync_playlist.py")],
         cwd=BASE_DIR,
@@ -510,15 +565,32 @@ async def convert_songs() -> JSONResponse:
             await asyncio.to_thread(_run_song_conversion)
         except subprocess.CalledProcessError as error:
             detail = (error.stderr or error.stdout or "Konverze selhala").strip()
+            _song_conversion_progress.update({"state": "failed", "active": False})
             return JSONResponse({"error": detail[-2000:]}, status_code=500)
+        except OSError as error:
+            _song_conversion_progress.update({"state": "failed", "active": False})
+            return JSONResponse({"error": str(error)}, status_code=500)
+        _song_conversion_progress.update({
+            "state": "complete",
+            "active": False,
+            "completed_count": _song_conversion_progress["total_count"],
+            "current_song": "",
+        })
         state.reload_queue()
         snapshot = state.snapshot()
         await manager.broadcast(snapshot)
     return JSONResponse({
         "converted_count": len(list(SONGS_DIR.glob("*.msg"))),
+        "converted_this_run": _song_conversion_progress["converted_count"],
+        "skipped_count": _song_conversion_progress["skipped_count"],
         "state": snapshot,
         **_song_tools_status(),
     })
+
+
+@app.get("/api/songs/conversion-progress")
+async def get_song_conversion_progress() -> JSONResponse:
+    return JSONResponse(dict(_song_conversion_progress))
 
 
 @app.get("/api/songs/upload-history")
@@ -550,58 +622,105 @@ async def upload_songs(body: dict[str, Any]) -> JSONResponse:
     async with _song_operation_lock:
         history = _load_upload_history()
         uploaded: dict[str, int] = {}
+        skipped: dict[str, int] = {}
         _song_upload_progress.update({
             "state": "uploading",
             "active": True,
             "target": target,
             "instrument": instruments[0],
+            "processed_count": 0,
             "uploaded_count": 0,
+            "skipped_count": 0,
             "total_count": len(song_files),
             "overall_count": 0,
             "overall_total": len(song_files) * len(instruments),
             "completed": {},
+            "skipped": {},
         })
         for instrument in instruments:
             count = 0
+            skipped_count = 0
+            processed_count = 0
             _song_upload_progress.update({
                 "instrument": instrument,
+                "processed_count": 0,
                 "uploaded_count": 0,
+                "skipped_count": 0,
                 "completed": dict(uploaded),
+                "skipped": dict(skipped),
             })
             try:
                 for song_path in song_files:
-                    success = await asyncio.to_thread(
-                        mqtt.publish_song, instrument, song_path.stem, song_path
+                    check = await asyncio.to_thread(
+                        mqtt.publish_instrument_wait,
+                        instrument,
+                        "check_song",
+                        {"fn": song_path.stem},
                     )
-                    if not success:
-                        raise RuntimeError("MQTT upload se nepodaril")
-                    count += 1
+                    exists = check.get("acknowledged", {}).get(instrument)
+                    if exists is None:
+                        raise TimeoutError(
+                            f"ESP {instrument} neodpovedelo na kontrolu skladby {song_path.stem}"
+                        )
+                    if exists:
+                        skipped_count += 1
+                    else:
+                        success = await asyncio.to_thread(
+                            mqtt.publish_song, instrument, song_path.stem, song_path
+                        )
+                        if not success:
+                            raise RuntimeError("MQTT upload se nepodaril")
+                        count += 1
+                    processed_count += 1
                     _song_upload_progress.update({
+                        "processed_count": processed_count,
                         "uploaded_count": count,
-                        "overall_count": sum(uploaded.values()) + count,
+                        "skipped_count": skipped_count,
+                        "overall_count": (
+                            sum(uploaded.values()) + sum(skipped.values())
+                            + processed_count
+                        ),
                         "completed": dict(uploaded),
+                        "skipped": dict(skipped),
                     })
             except (RuntimeError, TimeoutError, OSError) as error:
                 _song_upload_progress.update({
                     "state": "failed",
                     "active": False,
+                    "processed_count": processed_count,
                     "uploaded_count": count,
+                    "skipped_count": skipped_count,
+                    "overall_count": (
+                        sum(uploaded.values()) + sum(skipped.values())
+                        + processed_count
+                    ),
                     "completed": dict(uploaded),
+                    "skipped": dict(skipped),
                 })
                 return JSONResponse({
                     "error": str(error),
                     "instrument": instrument,
                     "uploaded_count": count,
+                    "skipped_count": skipped_count,
+                    "processed_count": processed_count,
                     "completed": uploaded,
+                    "skipped": skipped,
                     "last_uploads": history,
                 }, status_code=502)
             uploaded[instrument] = count
+            skipped[instrument] = skipped_count
             history[instrument] = datetime.now().astimezone().isoformat(timespec="seconds")
             _save_upload_history(history)
             _song_upload_progress["completed"] = dict(uploaded)
-        _song_upload_progress.update({"state": "complete", "active": False})
+            _song_upload_progress["skipped"] = dict(skipped)
+        _song_upload_progress.update({
+            "state": "complete",
+            "active": False,
+            "overall_count": _song_upload_progress["overall_total"],
+        })
     return JSONResponse({
         "uploaded": uploaded,
+        "skipped": skipped,
         "last_uploads": history,
         "song_count": len(song_files),
     })
