@@ -141,6 +141,8 @@ export const api = {
     for (const file of files) body.append("files", file);
     return request("POST", "/api/song-sources", body);
   },
+  deleteSongSource: (filename) =>
+    request("POST", "/api/song-sources/delete", { filename }),
   convertSongs: () => request("POST", "/api/songs/convert", {}),
   uploadSongs: (instrument) =>
     request("POST", "/api/songs/upload", { instrument }),

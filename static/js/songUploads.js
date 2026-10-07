@@ -1,4 +1,4 @@
-import { api, applySnapshot } from "./api.js?v=1.10";
+import { api, applySnapshot } from "./api.js?v=1.11";
 
 const TARGETS = ["guitar", "bass", "drums", "all"];
 const TARGET_LABELS = {
@@ -30,6 +30,7 @@ export async function initSongUploads() {
     <div class="song-actions">
       <button class="btn-save" id="song-convert" type="button" disabled>Convert</button>
       <button class="btn-save song-upload-button" id="song-upload" type="button" disabled>Upload</button>
+      <button class="btn-save song-delete-button" id="song-delete" type="button" disabled>Delete</button>
       <span class="song-work-status" id="song-work-status" aria-live="polite"></span>
     </div>
     <div class="upload-progress song-conversion-progress" id="conversion-progress" hidden>
@@ -57,6 +58,18 @@ export async function initSongUploads() {
       </div>
       <p class="upload-dialog-status" id="upload-dialog-status" aria-live="polite"></p>
     </dialog>
+
+    <dialog class="upload-dialog song-delete-dialog" id="song-delete-dialog">
+      <div class="upload-dialog-head">
+        <div><h2>Delete song from Raspberry Pi</h2><p>ESP copies are not affected</p></div>
+        <button class="dialog-close" id="song-delete-close" type="button" aria-label="Close">&times;</button>
+      </div>
+      <label class="song-delete-label" for="song-delete-select">Song</label>
+      <select class="song-delete-select" id="song-delete-select"></select>
+      <p class="upload-dialog-status">This removes the MuseScore source, converted files, and playlist entry from Raspberry Pi.</p>
+      <p class="upload-dialog-status" id="song-delete-status" aria-live="polite"></p>
+      <button class="btn-save song-delete-button song-delete-confirm" id="song-delete-confirm" type="button" disabled>Delete selected</button>
+    </dialog>
   `;
 
   const fileInput = view.querySelector("#song-files");
@@ -64,7 +77,12 @@ export async function initSongUploads() {
   const browseButton = view.querySelector("#song-browse");
   const convertButton = view.querySelector("#song-convert");
   const uploadButton = view.querySelector("#song-upload");
+  const deleteButton = view.querySelector("#song-delete");
   const dialog = view.querySelector("#upload-dialog");
+  const deleteDialog = view.querySelector("#song-delete-dialog");
+  const deleteSelect = view.querySelector("#song-delete-select");
+  const deleteConfirm = view.querySelector("#song-delete-confirm");
+  const deleteStatus = view.querySelector("#song-delete-status");
   const status = view.querySelector("#song-work-status");
   const dialogStatus = view.querySelector("#upload-dialog-status");
   const progressPanel = view.querySelector("#upload-progress");
@@ -138,6 +156,7 @@ export async function initSongUploads() {
     fileInput.disabled = busy;
     dropzone.classList.toggle("is-disabled", busy);
     convertButton.disabled = busy || tools.source_files.length === 0;
+    deleteButton.disabled = busy || tools.source_files.length === 0;
     convertButton.textContent = busy && status.dataset.operation === "convert"
       ? "Converting..." : "Convert";
     uploadButton.disabled = busy || tools.converted_count === 0 || tools.needs_conversion;
@@ -147,6 +166,7 @@ export async function initSongUploads() {
       ? "Convert the updated source files before uploading"
       : "Choose one instrument or all instruments";
     renderTargets();
+    renderDeleteOptions();
   }
 
   function formatUploadTime(value) {
@@ -177,6 +197,27 @@ export async function initSongUploads() {
     });
   }
 
+  function renderDeleteOptions() {
+    const selectedFilename = deleteSelect.value;
+    deleteSelect.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = tools.source_files.length
+      ? "Choose a song"
+      : "No songs available";
+    deleteSelect.append(placeholder);
+    tools.source_files.forEach((filename) => {
+      const option = document.createElement("option");
+      option.value = filename;
+      option.textContent = filename;
+      deleteSelect.append(option);
+    });
+    deleteSelect.value = tools.source_files.includes(selectedFilename)
+      ? selectedFilename : "";
+    deleteSelect.disabled = busy || tools.source_files.length === 0;
+    deleteConfirm.disabled = busy || !deleteSelect.value;
+  }
+
   async function refreshTools() {
     tools = await api.getSongTools();
     render();
@@ -205,6 +246,35 @@ export async function initSongUploads() {
 
   fileInput.addEventListener("change", () => void saveSources(fileInput.files));
   browseButton.addEventListener("click", () => fileInput.click());
+  deleteButton.addEventListener("click", () => {
+    if (busy || !tools.source_files.length) return;
+    deleteStatus.textContent = "";
+    renderDeleteOptions();
+    if (!deleteDialog.open) deleteDialog.showModal();
+  });
+  deleteSelect.addEventListener("change", () => {
+    deleteConfirm.disabled = busy || !deleteSelect.value;
+  });
+  view.querySelector("#song-delete-close").addEventListener("click", () => deleteDialog.close());
+  deleteConfirm.addEventListener("click", async () => {
+    const filename = deleteSelect.value;
+    if (!filename || busy) return;
+    busy = true;
+    deleteStatus.textContent = `Deleting ${filename}...`;
+    render();
+    try {
+      const result = await api.deleteSongSource(filename);
+      tools = result;
+      deleteDialog.close();
+      showStatus(`Deleted ${result.deleted} from Raspberry Pi. ESP copies remain.`, "is-success");
+    } catch (error) {
+      deleteStatus.textContent = error.payload?.error || error.message;
+      showStatus(`Delete failed: ${deleteStatus.textContent}`, "is-error");
+    } finally {
+      busy = false;
+      render();
+    }
+  });
   dropzone.addEventListener("click", (event) => {
     if (!event.target.closest("button") && !busy) fileInput.click();
   });

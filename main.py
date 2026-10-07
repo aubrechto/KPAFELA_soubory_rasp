@@ -553,6 +553,50 @@ async def add_song_sources(files: list[UploadFile] = File(...)) -> JSONResponse:
     return JSONResponse({"saved": saved, **_song_tools_status()})
 
 
+@app.post("/api/song-sources/delete")
+async def delete_song_source(body: dict[str, Any]) -> JSONResponse:
+    filename = body.get("filename")
+    if (not isinstance(filename, str) or not filename or
+            Path(filename).name != filename or "/" in filename or
+            "\\" in filename or Path(filename).suffix.lower() != ".mscz"):
+        return JSONResponse({"error": "Vyber platny zdrojovy .mscz soubor"}, status_code=400)
+
+    async with _song_operation_lock:
+        source_path = SONG_SOURCE_DIR / filename
+        if not source_path.is_file():
+            return JSONResponse({"error": "Zdrojova skladba nebyla nalezena"}, status_code=404)
+
+        song_id = hashlib.md5(source_path.stem.encode("utf-8")).hexdigest()[:16]
+        current_song = state.current
+        if (current_song and current_song.get("id") == song_id and
+                state.status in ("playing", "paused")):
+            return JSONResponse(
+                {"error": "Nejprve zastav prehravani teto skladby"},
+                status_code=409,
+            )
+
+        source_path.unlink()
+        (SONGS_DIR / f"{song_id}.msg").unlink(missing_ok=True)
+        (SONGS_DIR / f"{song_id}.json").unlink(missing_ok=True)
+        try:
+            await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, str(BASE_DIR / "tools" / "sync_playlist.py")],
+                cwd=BASE_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or error.stdout or "Playlist refresh failed").strip()
+            return JSONResponse({"error": detail[-2000:]}, status_code=500)
+
+        state.reload_queue()
+        snapshot = state.snapshot()
+        await manager.broadcast(snapshot)
+    return JSONResponse({"deleted": filename, **_song_tools_status()})
+
+
 @app.post("/api/songs/convert")
 async def convert_songs() -> JSONResponse:
     async with _song_operation_lock:
