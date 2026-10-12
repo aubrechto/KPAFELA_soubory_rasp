@@ -32,8 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mqtt-port", type=int, default=1883)
     parser.add_argument("--mqtt-user")
     parser.add_argument("--mqtt-password")
-    parser.add_argument("--chunk-size", type=int, default=1024)
-    parser.add_argument("--chunk-delay", type=float, default=0.01,
+    parser.add_argument("--chunk-size", type=int, default=1200)
+    parser.add_argument("--chunk-delay", type=float, default=0.0,
                         help="pauza mezi chunky (s), aby ESP stihlo MQTT zpracovat")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--retries", type=int, default=2,
