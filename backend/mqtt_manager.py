@@ -34,6 +34,7 @@ INSTRUMENT_NAMES = ("guitar", "bass", "drums")
 COMMAND_ACK_TIMEOUT = 1.5
 COMMAND_ACK_RETRIES = 2
 DEVICE_STATUS_MAX_AGE = 90.0
+PLAY_START_DELAY_SECONDS = 1.0
 
 StatusHandler = Callable[[str, dict[str, Any]], None]
 
@@ -131,6 +132,8 @@ class MqttManager:
     def publish_player_wait(self, command: str,
                             payload: dict[str, Any] | None = None) -> dict[str, Any]:
         data = {"command": command, **(payload or {})}
+        if command == "play":
+            data.setdefault("start_at", time.time() + PLAY_START_DELAY_SECONDS)
         return self._publish_command_wait(TOPIC_PLAYER, data,
                                           self._active_instruments())
 
@@ -138,9 +141,12 @@ class MqttManager:
         self, name: str, command: str,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        data = {"command": command, **(payload or {})}
+        if command == "play":
+            data.setdefault("start_at", time.time() + PLAY_START_DELAY_SECONDS)
         return self._publish_command_wait(
             f"{TOPIC_INSTRUMENT}/{name}",
-            {"command": command, **(payload or {})},
+            data,
             {name},
         )
 
@@ -202,17 +208,12 @@ class MqttManager:
         self._publish(f"{TOPIC_ROOT}/config/{name}", config_data)
 
     def publish_time(self, name: str, t0_ms: Any = None) -> None:
-        """Push the Pi's current clock to one ESP so it can (re)sync.
-
-        The ESP applies this epoch directly instead of pulling it itself via
-        NTP, so every instrument ends up synchronized to the same source.
-        When ``t0_ms`` (the ESP's own millis() at request time) is echoed
-        back, the ESP can measure the round-trip and compensate for network
-        latency instead of taking the epoch at face value.
-        """
-        payload: dict[str, Any] = {"epoch": time.time()}
+        """Reply to an ESP time probe with Pi receive and transmit times."""
+        received_at = time.time()
+        payload: dict[str, Any] = {"t1_epoch": received_at}
         if t0_ms is not None:
             payload["t0_ms"] = t0_ms
+        payload["t2_epoch"] = time.time()
         self._publish(f"{TOPIC_INSTRUMENT}/{name}/time", payload)
 
     def publish_instruments_config(self, config_data: dict[str, Any]) -> None:
