@@ -1054,6 +1054,17 @@ async def test_instruments() -> JSONResponse:
                         status_code=200 if ack["success"] else 504)
 
 
+@app.post("/api/instruments/servo-test")
+async def test_instrument_servos() -> JSONResponse:
+    async with _command_request_lock:
+        ack = await asyncio.to_thread(mqtt.publish_all_instruments_wait,
+                                      "servo test")
+    return JSONResponse(
+        {"ok": ack["success"], "command": "servo test", "ack": ack},
+        status_code=200 if ack["success"] else 504,
+    )
+
+
 @app.post("/api/terminal/complete")
 async def terminal_complete(request: Request, body: dict[str, Any]) -> JSONResponse:
     token = request.cookies.get(TERMINAL_TOKEN_COOKIE)

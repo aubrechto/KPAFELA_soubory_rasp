@@ -150,6 +150,9 @@ export const api = {
   testInstruments: () => trackCommand(
     instrumentNames, () => request("POST", "/api/instruments/test")
   ),
+  testInstrumentServos: () => trackCommand(
+    instrumentNames, () => request("POST", "/api/instruments/servo-test")
+  ),
   syncTime: (time) => request("POST", "/api/time/sync", { time }),
   player: (command, body) => {
     const send = () => request("POST", `/api/player/${command}`, body ?? {});
