@@ -11,7 +11,7 @@ export const store = {
   queue: [],
   library: [],
   instruments: { guitar: "idle", bass: "idle", drums: "idle" },
-  instrumentCommandState: { guitar: "ready", bass: "ready", drums: "ready" },
+  instrumentCommandState: { guitar: "offline", bass: "offline", drums: "offline" },
   songChecks: {},
   instrumentTimes: {},
   instrumentWifi: {},
@@ -82,9 +82,10 @@ function trackCommand(names, send) {
 
 // Merge an incoming WebSocket/REST snapshot into the local store.
 export function applySnapshot(snap) {
-  const ackEvent = snap.command_ack_event;
+  const ackEvent = snap.device_ack_event || snap.command_ack_event;
   if (ackEvent) {
-    if (store.instrumentCommandState[ackEvent.instrument] === "pending") {
+    if (snap.device_ack_event ||
+        store.instrumentCommandState[ackEvent.instrument] === "pending") {
       store.instrumentCommandState[ackEvent.instrument] =
         ackEvent.success ? "ready" : "error";
     }
@@ -103,7 +104,14 @@ export function applySnapshot(snap) {
     store.serverTimeReceivedAt = Date.now();
   }
   if (snap.instruments_config) store.instrumentsConfig = snap.instruments_config;
-  if (snap.mqtt) store.mqtt = { ...store.mqtt, ...snap.mqtt };
+  if (snap.mqtt) {
+    store.mqtt = { ...store.mqtt, ...snap.mqtt };
+    if (!store.mqtt.connected) {
+      for (const name of instrumentNames) {
+        store.instrumentCommandState[name] = "offline";
+      }
+    }
+  }
   emit();
 }
 

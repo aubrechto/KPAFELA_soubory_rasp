@@ -266,11 +266,12 @@ def _handle_mqtt_status(topic: str, data: dict[str, Any]) -> None:
         parts = topic.split("/")
         if len(parts) >= 3:
             name = parts[2]
-            if data.get("event") == "command_ack" and _loop is not None:
+            if data.get("event") in ("command_ack", "connection_ack") and _loop is not None:
                 asyncio.run_coroutine_threadsafe(
-                    manager.broadcast({"command_ack_event": {
+                    manager.broadcast({"device_ack_event": {
                         "instrument": name,
-                        "success": bool(data.get("success", False)),
+                        "success": data.get("event") == "connection_ack" or
+                        bool(data.get("success", False)),
                     }}),
                     _loop,
                 )

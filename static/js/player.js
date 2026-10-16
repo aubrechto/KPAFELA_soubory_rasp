@@ -58,7 +58,7 @@ export function initPlayer() {
       <img class="instrument-img" src="${coverUrl(name + ".png")}" alt="${name}" crossorigin="anonymous" />
       <div class="instrument-head">
         <span class="instrument-name">${name}</span>
-        <span class="command-indicator is-live" data-command-indicator aria-label="Command ACK potvrzen" title="Command ACK potvrzen"><span class="dot"></span></span>
+        <span class="command-indicator" data-command-indicator aria-label="Čekám na ACK od ESP" title="Čekám na ACK od ESP"><span class="dot"></span></span>
         <span class="status-pill idle" data-status>IDLE</span>
       </div>
       <div class="song-check-flag" data-song-check hidden aria-live="polite"></div>
@@ -153,7 +153,7 @@ function render() {
     songCheck.textContent = songCheckState === "found" ? "Skladba nalezena" :
       songCheckState === "missing" ? "Skladba chybí" :
         songCheckState === "unavailable" ? "ESP neodpovědělo" : "";
-    const commandState = store.instrumentCommandState[card.dataset.instrument] || "ready";
+    const commandState = store.instrumentCommandState[card.dataset.instrument] || "offline";
     const commandReady = commandState === "ready";
     const commandFailed = commandState === "error";
     commandIndicator.classList.toggle("is-live", commandReady);
